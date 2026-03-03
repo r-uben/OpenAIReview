@@ -2,16 +2,10 @@
 
 Processes the paper sequentially, maintaining a running summary of definitions,
 equations, theorems, and key claims. For each passage:
-  1. (Optional) Small-model pre-filter to skip non-technical content
-  2. Deep-check (Opus): running summary + window context + passage → find errors
-  3. Summary update (configurable model): current summary + passage → updated summary
+  1. (Optional) Pre-filter to skip non-technical content
+  2. Deep-check: running summary + window context + passage → find errors
+  3. Summary update: current summary + passage → updated summary
   4. Post-hoc consolidation: one final call to deduplicate and prune low-confidence issues
-
-Variants:
-  incremental            — Opus summary + Opus detection
-  incremental_sonnet     — Sonnet summary + Opus detection
-  incremental_skip       — Opus summary + Opus detection, skip non-technical
-  incremental_sonnet_skip — Sonnet summary + Opus detection, skip non-technical
 """
 
 import json
@@ -197,30 +191,6 @@ PAPER (first 8000 characters):
 
 
 # ---------------------------------------------------------------------------
-# Variant configuration
-# ---------------------------------------------------------------------------
-
-INCREMENTAL_VARIANTS = {
-    "incremental": {
-        "summary_model": None,  # None = same as detection model
-        "skip_nontechnical": False,
-    },
-    "incremental_sonnet": {
-        "summary_model": "anthropic/claude-sonnet-4",
-        "skip_nontechnical": False,
-    },
-    "incremental_skip": {
-        "summary_model": None,
-        "skip_nontechnical": True,
-    },
-    "incremental_sonnet_skip": {
-        "summary_model": "anthropic/claude-sonnet-4",
-        "skip_nontechnical": True,
-    },
-}
-
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -279,14 +249,14 @@ def update_running_summary(
 
 def is_technical_passage(
     passage_text: str,
-    small_model: str,
+    model: str,
     result: ReviewResult,
 ) -> bool:
-    """Use a small model to decide if a passage has technical content worth checking."""
+    """Use the model to decide if a passage has technical content worth checking."""
     prompt = TECHNICAL_FILTER_PROMPT.format(passage=passage_text[:2000])
     response, usage = chat(
         messages=[{"role": "user", "content": prompt}],
-        model=small_model,
+        model=model,
         max_tokens=8,
     )
     result.total_prompt_tokens += usage["prompt_tokens"]
@@ -346,10 +316,9 @@ def review_incremental(
     paper_slug: str,
     document_content: str,
     model: str = "anthropic/claude-opus-4-5",
-    small_model: str = "anthropic/claude-haiku-4-5",
-    variant: str = "incremental",
+    skip_nontechnical: bool = False,
     window_size: int = 3,
-) -> ReviewResult:
+) -> tuple[ReviewResult, ReviewResult]:
     """Review a paper using incremental summary approach.
 
     Processes the paper sequentially. For each passage:
@@ -357,20 +326,18 @@ def review_incremental(
       2. Deep-check with running summary + window context
       3. Update the running summary
     Then consolidate all comments in a final pass.
-    """
-    config = INCREMENTAL_VARIANTS.get(variant, INCREMENTAL_VARIANTS["incremental"])
-    summary_model = config["summary_model"] or model
-    skip_nontechnical = config["skip_nontechnical"]
 
+    Returns (consolidated_result, full_result).
+    """
     result = ReviewResult(
-        method=variant,
+        method="incremental",
         paper_slug=paper_slug,
-        model=f"{summary_model}+{model}" if summary_model != model else model,
+        model=model,
     )
 
     paragraphs = split_into_paragraphs(document_content)
     passages = merge_into_passages(paragraphs)
-    print(f"  Incremental [{variant}]: {len(passages)} passages (from {len(paragraphs)} paragraphs)")
+    print(f"  Incremental: {len(passages)} passages (from {len(paragraphs)} paragraphs)")
 
     running_summary = ""
     all_comments = []
@@ -381,7 +348,7 @@ def review_incremental(
 
         # Step 0: Optional pre-filter
         if skip_nontechnical:
-            if not is_technical_passage(passage_text, small_model, result):
+            if not is_technical_passage(passage_text, model, result):
                 skipped += 1
                 print(f"    Passage {idx+1}/{len(passages)}: SKIPPED (non-technical)")
                 # Still update summary even for skipped passages (may have definitions)
@@ -390,7 +357,7 @@ def review_incremental(
                     passage_text=passage_text,
                     passage_idx=idx,
                     total_passages=len(passages),
-                    model=summary_model,
+                    model=model,
                     result=result,
                 )
                 continue
@@ -445,7 +412,7 @@ def review_incremental(
             passage_text=passage_text,
             passage_idx=idx,
             total_passages=len(passages),
-            model=summary_model,
+            model=model,
             result=result,
         )
 
@@ -468,10 +435,10 @@ def review_incremental(
     result.comments = consolidate_comments(all_comments, model, result)
     print(f"  After consolidation: {len(result.comments)} comments")
 
-    # Build full (pre-consolidation) result — copy after consolidation so token counts match
+    # Build full (pre-consolidation) result
     import copy
     full_result = copy.deepcopy(result)
-    full_result.method = variant + "_full"
+    full_result.method = "incremental_full"
     full_result.comments = all_comments
 
     return result, full_result

@@ -7,13 +7,14 @@ import re
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-load_dotenv()
 
-
-DEFAULT_LARGE_MODEL = os.environ.get("LARGE_MODEL", "anthropic/claude-opus-4-5")
-DEFAULT_SMALL_MODEL = os.environ.get("SMALL_MODEL", "anthropic/claude-haiku-4-5")
+DEFAULT_MODEL = os.environ.get("MODEL", "anthropic/claude-opus-4-5")
 
 
 def slugify(name: str) -> str:
@@ -28,7 +29,7 @@ def slugify(name: str) -> str:
 def cmd_review(args: argparse.Namespace) -> None:
     """Run a review on a document."""
     from .method_incremental import review_incremental
-    from .method_rag import review_rag
+    from .method_local import review_local
     from .method_zero_shot import review_zero_shot
     from .parsers import parse_document
     from .utils import split_into_paragraphs
@@ -50,19 +51,16 @@ def cmd_review(args: argparse.Namespace) -> None:
     print(f"Running method: {method}...")
 
     if method == "zero_shot":
-        result = review_zero_shot(slug, content, model=args.large_model)
-    elif method == "rag_local":
-        result = review_rag(
+        result = review_zero_shot(slug, content, model=args.model)
+    elif method == "local":
+        result = review_local(
             slug, content,
-            small_model=args.small_model,
-            large_model=args.large_model,
-            variant="rag_local",
+            model=args.model,
         )
     elif method in ("incremental", "incremental_full"):
         consolidated, full = review_incremental(
             slug, content,
-            model=args.large_model,
-            small_model=args.small_model,
+            model=args.model,
         )
         result = full if method == "incremental_full" else consolidated
     else:
@@ -150,17 +148,13 @@ def main() -> None:
     review_parser.add_argument("file", help="Path to the paper file")
     review_parser.add_argument(
         "--method",
-        choices=["zero_shot", "rag_local", "incremental", "incremental_full"],
+        choices=["zero_shot", "local", "incremental", "incremental_full"],
         default="incremental",
         help="Review method (default: incremental)",
     )
     review_parser.add_argument(
-        "--large-model", default=DEFAULT_LARGE_MODEL,
-        help="Large model for deep analysis",
-    )
-    review_parser.add_argument(
-        "--small-model", default=DEFAULT_SMALL_MODEL,
-        help="Small model for filtering/summarization",
+        "--model", default=DEFAULT_MODEL,
+        help="Model to use (default: anthropic/claude-opus-4-5)",
     )
     review_parser.add_argument(
         "--output-dir", default="./review_results",

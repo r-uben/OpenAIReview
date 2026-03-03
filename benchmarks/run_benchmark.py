@@ -19,24 +19,20 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from reviewer.evaluate import evaluate, load_benchmark, print_report
 from reviewer.method_incremental import review_incremental
-from reviewer.method_rag import RAG_VARIANTS, review_rag
+from reviewer.method_local import review_local
 from reviewer.method_zero_shot import review_zero_shot
 
-DEFAULT_LARGE_MODEL = os.environ.get("LARGE_MODEL", "anthropic/claude-opus-4-5")
-DEFAULT_SMALL_MODEL = os.environ.get("SMALL_MODEL", "anthropic/claude-haiku-4-5")
+DEFAULT_MODEL = os.environ.get("MODEL", "anthropic/claude-opus-4-5")
 
 METHODS = {
     "zero_shot": lambda slug, doc, args: review_zero_shot(
-        slug, doc, model=args.large_model
+        slug, doc, model=args.model
     ),
-    "rag": lambda slug, doc, args: review_rag(
-        slug, doc,
-        small_model=args.small_model,
-        large_model=args.large_model,
-        variant=args.rag_variant,
+    "local": lambda slug, doc, args: review_local(
+        slug, doc, model=args.model,
     ),
     "incremental": lambda slug, doc, args: review_incremental(
-        slug, doc, model=args.large_model
+        slug, doc, model=args.model
     ),
 }
 
@@ -57,20 +53,9 @@ def main():
         help="Paper slugs to evaluate (default: all)",
     )
     parser.add_argument(
-        "--large-model",
-        default=DEFAULT_LARGE_MODEL,
-        help="Large model for zero-shot, few-shot, and RAG deep-check",
-    )
-    parser.add_argument(
-        "--small-model",
-        default=DEFAULT_SMALL_MODEL,
-        help="Small model for RAG filtering/retrieval",
-    )
-    parser.add_argument(
-        "--rag-variant",
-        choices=list(RAG_VARIANTS.keys()),
-        default="rag_retrieved",
-        help="RAG context/filter strategy variant",
+        "--model",
+        default=DEFAULT_MODEL,
+        help="Model to use for review",
     )
     parser.add_argument(
         "--output",

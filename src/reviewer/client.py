@@ -1,12 +1,16 @@
 """OpenRouter API client."""
 
 import os
+import sys
 import time
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -14,13 +18,22 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 def get_client() -> OpenAI:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        raise ValueError("OPENROUTER_API_KEY environment variable not set")
+        print(
+            "Error: OPENROUTER_API_KEY is not set.\n\n"
+            "Set it as an environment variable:\n"
+            "  export OPENROUTER_API_KEY=your_key_here\n\n"
+            "Or create a .env file in the project root:\n"
+            "  OPENROUTER_API_KEY=your_key_here\n\n"
+            "Get your API key at https://openrouter.ai/keys",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
 
 
 def chat(
     messages: list[dict],
-    model: str = "anthropic/claude-haiku-4-5",
+    model: str = "anthropic/claude-opus-4-5",
     temperature: float | None = None,
     max_tokens: int = 4096,
     retries: int = 3,

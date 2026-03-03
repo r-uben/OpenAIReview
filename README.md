@@ -1,4 +1,4 @@
-# OpenAI Review
+# OpenAIReview
 
 AI-powered academic paper reviewer that detects technical and logical errors using LLMs.
 
@@ -12,14 +12,22 @@ pip install -e .
 
 ## Quick Start
 
+First, set your OpenRouter API key (get one at [openrouter.ai/keys](https://openrouter.ai/keys)):
+
 ```bash
-# Set your API key
 export OPENROUTER_API_KEY=your_key_here
+```
 
-# Review a paper
+Or create a `.env` file in your working directory:
+
+```
+OPENROUTER_API_KEY=your_key_here
+```
+
+Then review a paper and visualize results:
+
+```bash
 openaireview review paper.pdf
-
-# View results in browser
 openaireview serve
 # Open http://localhost:8080
 ```
@@ -32,9 +40,8 @@ Review an academic paper for technical and logical issues.
 
 | Option | Default | Description |
 |---|---|---|
-| `--method` | `incremental` | Review method: `zero_shot`, `rag_local`, `incremental`, `incremental_full` |
-| `--large-model` | `anthropic/claude-opus-4-5` | Model for deep analysis |
-| `--small-model` | `anthropic/claude-haiku-4-5` | Model for filtering/summarization |
+| `--method` | `incremental` | Review method: `zero_shot`, `local`, `incremental`, `incremental_full` |
+| `--model` | `anthropic/claude-opus-4-5` | Model to use |
 | `--output-dir` | `./review_results` | Directory for output JSON files |
 | `--name` | (from filename) | Paper slug name |
 
@@ -59,15 +66,14 @@ Start a local visualization server to browse review results.
 | Variable | Default | Description |
 |---|---|---|
 | `OPENROUTER_API_KEY` | (required) | Your OpenRouter API key |
-| `LARGE_MODEL` | `anthropic/claude-opus-4-5` | Default large model |
-| `SMALL_MODEL` | `anthropic/claude-haiku-4-5` | Default small model |
+| `MODEL` | `anthropic/claude-opus-4-5` | Default model |
 
-See `.env.example` for a template.
+These can be set as environment variables or in a `.env` file. See `.env.example` for a template.
 
 ## Review Methods
 
 - **zero_shot** — single prompt asking the model to find all issues
-- **rag_local** — small model filters paragraphs, large model deep-checks each with window context
+- **local** — deep-checks each chunk with surrounding window context (no filtering)
 - **incremental** — sequential processing with running summary, then consolidation
 - **incremental_full** — same as incremental but returns all comments before consolidation
 

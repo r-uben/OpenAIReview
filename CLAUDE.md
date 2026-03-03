@@ -15,7 +15,7 @@
 - `client.py` — OpenRouter wrapper (loads `.env` automatically via `python-dotenv`).
 - `utils.py` — `count_tokens`, `chunk_text`, `parse_comments_from_response`, `locate_comment_in_document`, `assign_paragraph_indices`.
 - `method_zero_shot.py` — single-prompt review; chunks paper if > 100K tokens.
-- `method_rag.py` — Haiku filters candidate paragraphs, Opus deep-checks each with window context.
+- `method_local.py` — deep-checks each chunk with surrounding window context.
 - `method_incremental.py` — sequential processing with running summary + consolidation.
 - `evaluate.py` — recall/precision/F1 via fuzzy quote similarity, location-based recall, cost estimation.
 - `viz/index.html` — Visualization UI (served by `serve.py`).
