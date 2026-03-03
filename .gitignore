@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+
+# Environment
+.env
+
+# Results
+results/
+benchmarks/results/
+data/raw_html/
+benchmarks/data/raw_html/
+
+# Review output
+review_results/
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store

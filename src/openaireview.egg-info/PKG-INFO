@@ -1,0 +1,92 @@
+Metadata-Version: 2.4
+Name: openaireview
+Version: 0.1.0
+Summary: AI-powered academic paper reviewer
+License-Expression: MIT
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: openai>=2.21.0
+Requires-Dist: python-dotenv>=1.2.1
+Requires-Dist: tiktoken>=0.12.0
+Requires-Dist: pymupdf>=1.24.0
+Requires-Dist: python-docx>=1.1.0
+Provides-Extra: dev
+Requires-Dist: beautifulsoup4>=4.14.3; extra == "dev"
+Requires-Dist: lxml>=6.0.2; extra == "dev"
+
+# OpenAI Review
+
+AI-powered academic paper reviewer that detects technical and logical errors using LLMs.
+
+## Installation
+
+```bash
+pip install .
+# or for development:
+pip install -e .
+```
+
+## Quick Start
+
+```bash
+# Set your API key
+export OPENROUTER_API_KEY=your_key_here
+
+# Review a paper
+openaireview review paper.pdf
+
+# View results in browser
+openaireview serve
+# Open http://localhost:8080
+```
+
+## CLI Reference
+
+### `openaireview review <file>`
+
+Review an academic paper for technical and logical issues.
+
+| Option | Default | Description |
+|---|---|---|
+| `--method` | `incremental` | Review method: `zero_shot`, `rag_local`, `incremental`, `incremental_full` |
+| `--large-model` | `anthropic/claude-opus-4-5` | Model for deep analysis |
+| `--small-model` | `anthropic/claude-haiku-4-5` | Model for filtering/summarization |
+| `--output-dir` | `./review_results` | Directory for output JSON files |
+| `--name` | (from filename) | Paper slug name |
+
+### `openaireview serve`
+
+Start a local visualization server to browse review results.
+
+| Option | Default | Description |
+|---|---|---|
+| `--results-dir` | `./review_results` | Directory containing result JSON files |
+| `--port` | `8080` | Server port |
+
+## Supported File Formats
+
+- **PDF** (`.pdf`) — text extraction via PyMuPDF
+- **DOCX** (`.docx`) — via python-docx
+- **LaTeX** (`.tex`) — plain text with title extraction from `\title{}`
+- **Text/Markdown** (`.txt`, `.md`) — plain text
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENROUTER_API_KEY` | (required) | Your OpenRouter API key |
+| `LARGE_MODEL` | `anthropic/claude-opus-4-5` | Default large model |
+| `SMALL_MODEL` | `anthropic/claude-haiku-4-5` | Default small model |
+
+See `.env.example` for a template.
+
+## Review Methods
+
+- **zero_shot** — single prompt asking the model to find all issues
+- **rag_local** — small model filters paragraphs, large model deep-checks each with window context
+- **incremental** — sequential processing with running summary, then consolidation
+- **incremental_full** — same as incremental but returns all comments before consolidation
+
+## Benchmarks
+
+Benchmark data and experiment scripts are in `benchmarks/`. See `benchmarks/REPORT.md` for results.
