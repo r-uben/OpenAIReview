@@ -4,13 +4,13 @@
 
 Academic peer review is slow, expensive, and inconsistent. A single paper can wait months for feedback from a handful of reviewers, each bringing different expertise and attention. Meanwhile, LLMs can read a 50,000-token paper in seconds and have absorbed more scientific literature than any individual human. So the natural question is: how well can they actually catch mistakes?
 
-This post documents a benchmarking experiment: building an AI paper reviewer and iterating on approaches to maximize recall against expert-annotated ground truth.
+This post documents a benchmarking experiment: building an AI paper reviewer and iterating on approaches to maximize recall against Refine comments as ground truth.
 
 ---
 
 ## The Benchmark
 
-We used four papers from [refine.ink](https://www.refine.ink/examples), each with expert-annotated comments identifying specific errors. Every comment includes a verbatim quote, a detailed explanation, a confidence score, and a `paragraph_index` that anchors it to a specific location in the document.
+We used four papers from [refine.ink](https://www.refine.ink/examples), each with comments from Refine identifying specific errors. Every comment includes a verbatim quote, a detailed explanation, a confidence score, and a `paragraph_index` that anchors it to a specific location in the document.
 
 | Paper | Field | Comments |
 |---|---|---|
