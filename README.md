@@ -25,7 +25,7 @@ For math-heavy PDFs, install [Marker](https://github.com/VikParuchuri/marker) se
 
 ```bash
 # Install Marker CLI in an isolated environment (avoids dependency conflicts)
-uv tool install marker-pdf
+uv tool install marker-pdf --with psutil
 ```
 
 Marker is used automatically when available on PATH. For papers with math, we recommend using `.tex` source or arXiv HTML URLs instead of PDF when possible — these always produce correct output.

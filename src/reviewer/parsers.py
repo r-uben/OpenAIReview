@@ -67,15 +67,18 @@ def _parse_pdf_marker(path: Path) -> tuple[str, str]:
         import subprocess
         import tempfile
 
-        marker_bin = shutil.which("marker_single") or shutil.which("marker")
+        marker_bin = shutil.which("marker_single")
         if not marker_bin:
-            raise FileNotFoundError("marker CLI not found on PATH")
+            raise FileNotFoundError("marker_single not found on PATH")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = subprocess.run(
-                [marker_bin, str(path), "--output_dir", tmpdir],
-                capture_output=True, text=True, timeout=300,
-            )
+            try:
+                result = subprocess.run(
+                    [marker_bin, str(path), "--output_dir", tmpdir],
+                    capture_output=True, text=True, timeout=600,
+                )
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("marker timed out after 600s")
             if result.returncode != 0:
                 raise RuntimeError(f"marker failed: {result.stderr[:500]}")
 
