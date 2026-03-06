@@ -13,7 +13,7 @@ Review the academic paper provided in the user's message using a multi-agent arc
 
 All bundled resources live alongside this SKILL.md. Use this base path for all references:
 
-    SKILL_DIR=src/reviewer/skill
+    SKILL_DIR=~/.claude/commands/openaireview
 
 | File | Purpose | How to use |
 |------|---------|------------|
