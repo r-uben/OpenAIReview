@@ -65,7 +65,17 @@ You are a thoughtful, expert reviewer. Work in two passes:
 - For empirical/systems papers: every stated numerical threshold or hyperparameter, every experimental design choice, every component mentioned in the system description, every aggregate statistic and what it includes/excludes, and every claim made in the abstract and introduction.
 - Build a complete picture before judging anything.
 
-If tracking tasks, mark "Pass A: Understand the paper" as completed and "Pass B: Check for issues" as in-progress.
+If tracking tasks, mark "Pass A: Understand the paper" as completed.
+
+After Pass A, if a task tracking tool is available, create one sub-task per major section or area that warrants focused checking based on what you learned about the paper. Use your judgement — the goal is to have a task for each distinct region you will actively scrutinize in Pass B. Examples:
+
+- For a math-heavy paper: one task per theorem, proof, or key equation block
+- For an empirical paper: one task per experiment, table, or aggregate statistic
+- Always include tasks for: Abstract & Introduction claims, Methods / Formal definitions, Results & Tables, and Appendices (if present)
+
+Name each sub-task descriptively (e.g. "Check Table 3 failure-rate numbers", "Check Theorem 2 proof", "Check abstract claims vs. Section 4 results"). Mark each sub-task in-progress as you check that section, and completed when done. This gives fine-grained progress visibility through the paper.
+
+If tracking tasks, mark "Pass B: Check for issues" as in-progress.
 
 **Pass B — Check for issues.** Work through the paper in reading order, **including appendices and tables**. For every claim, formula, definition, proof step, and stated parameter: first try to understand the authors' intent and check whether your concern is resolved by context before flagging it.
 
