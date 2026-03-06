@@ -2,7 +2,7 @@
 """Build viz-compatible JSON from review findings and save to review_results/.
 
 Usage:
-    python3 .claude/commands/openaireview/scripts/save_viz_json.py /tmp/<slug>_review [--output-dir ./review_results]
+    python3 ~/.claude/commands/openaireview/scripts/save_viz_json.py /tmp/<slug>_review [--output-dir ./review_results]
 
 Expects these files in the review workspace:
     metadata.json          -- {"title": "...", "slug": "..."}

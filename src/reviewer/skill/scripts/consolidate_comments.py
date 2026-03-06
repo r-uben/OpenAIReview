@@ -2,7 +2,7 @@
 """Gather and merge all sub-agent comment JSON files from a review workspace.
 
 Usage:
-    python3 .claude/commands/openaireview/scripts/consolidate_comments.py /tmp/<slug>_review
+    python3 ~/.claude/commands/openaireview/scripts/consolidate_comments.py /tmp/<slug>_review
 
 Reads every .json file in <review_dir>/comments/, annotates each issue with
 its source file, and prints the merged array to stdout.
