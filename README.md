@@ -78,6 +78,9 @@ Then in any Claude Code project:
 /openaireview https://arxiv.org/abs/2602.18458
 ```
 
+Finally, run `openaireview serve` to see results.
+```
+
 ## CLI Reference
 
 ### `openaireview review <file_or_url>`
