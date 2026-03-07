@@ -392,8 +392,6 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.badge.technical { background: var(--red-light); color: #b91c1c; border: 1px solid var(--red-border); }
-.badge.logical { background: var(--orange-light); color: #92400e; border: 1px solid var(--orange-border); }
 .badge.major { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 .badge.moderate { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
 .badge.minor { background: #f0f9ff; color: #075985; border: 1px solid #bae6fd; }
@@ -927,7 +925,6 @@ function renderCommentCard(c) {
 
   let badges = '';
   if (c.severity) badges += `<span class="badge ${c.severity}">${c.severity}</span>`;
-  if (c.comment_type) badges += `<span class="badge ${c.comment_type}">${c.comment_type}</span>`;
 
   return `<div class="comment-card" id="card-${c.id}" data-id="${c.id}">
     <div class="card-header">
