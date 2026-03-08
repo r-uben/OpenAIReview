@@ -2,14 +2,14 @@
 """Prepare a deep-review workspace: parse paper, split into sections, write files.
 
 Usage:
-    python3 ~/.claude/commands/openaireview/scripts/prepare_workspace.py <input> [--slug SLUG] [--criteria PATH]
+    python3 ~/.claude/commands/openaireview/scripts/prepare_workspace.py <input> [--slug SLUG] [--criteria PATH] [--output-dir DIR]
 
 The script auto-detects input type (PDF, arXiv URL, .tex/.txt/.md), downloads if
 needed, parses the paper, splits into sections, and writes a structured workspace
-to /tmp/<slug>_review/.
+to <output-dir>/<slug>_review/ (default: ./review_results/<slug>_review/).
 
 Workspace layout:
-    /tmp/<slug>_review/
+    <output-dir>/<slug>_review/
         metadata.json       -- title, slug, total character count
         full_text.md         -- complete paper text
         criteria.md          -- review criteria (if --criteria provided)
@@ -264,12 +264,13 @@ def main():
     parser.add_argument("input", help="Paper path or URL")
     parser.add_argument("--slug", help="Override slug (default: auto-detected)")
     parser.add_argument("--criteria", help="Path to criteria.md to copy into workspace")
+    parser.add_argument("--output-dir", default="./review_results", help="Parent directory for the workspace (default: ./review_results)")
     args = parser.parse_args()
 
     source_type = detect_input_type(args.input)
     slug = args.slug or make_slug(args.input)
 
-    review_dir = Path(f"/tmp/{slug}_review")
+    review_dir = Path(args.output_dir) / f"{slug}_review"
     for d in ("sections", "comments"):
         (review_dir / d).mkdir(parents=True, exist_ok=True)
 
