@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openaireview"
-version = "0.1.7"
+version = "0.1.11"
 description = "AI-powered academic paper reviewer"
 readme = "README.md"
 license = "MIT"
@@ -29,4 +29,4 @@ where = ["src"]
 reviewer = ["viz/*.html", "skill/SKILL.md", "skill/scripts/*.py", "skill/references/*.md"]
 
 [project.optional-dependencies]
-dev = []
+dev = ["pytest>=8.0"]

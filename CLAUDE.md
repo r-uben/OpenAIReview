@@ -27,6 +27,15 @@ openaireview review paper.pdf --method zero_shot
 openaireview serve --results-dir ./review_results --port 8080
 ```
 
+### Claude Code Skill (`src/reviewer/skill/`)
+- `SKILL.md` — Skill definition for `/openaireview` command in Claude Code. Runs a multi-agent pipeline with section-level sub-agents and cross-cutting agents, producing severity-tiered findings (major/moderate/minor).
+- `scripts/prepare_workspace.py` — Parses paper, splits into sections, writes workspace files.
+- `scripts/consolidate_comments.py` — Merges sub-agent comment JSONs, deduplicates, and assigns severity tiers.
+- `scripts/save_viz_json.py` — Builds viz-compatible JSON for `openaireview serve`.
+- `references/criteria.md` — Review criteria copied into workspace for sub-agents.
+- `references/subagent_templates.md` — Prompt templates for sub-agents.
+- Install with `openaireview install-skill`, then use `/openaireview <path-or-url>` in Claude Code.
+
 ### Benchmark data (`benchmarks/`)
 - `benchmarks/data/` — Raw HTML pages from refine.ink + parsed `benchmark.jsonl`.
 - `benchmarks/scripts/` — Parsing, experiment, and evaluation scripts.
