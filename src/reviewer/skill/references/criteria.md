@@ -10,6 +10,7 @@
 7. **Misleading ambiguity** -- only if a careful reader could reasonably reach an incorrect conclusion
 8. **Underspecified methods** -- procedure too vague to reproduce; key parameters left implicit; components mentioned but never described
 9. **Internal contradictions** -- a claim contradicted by another section; a stated mitigation undermined later
+10. **Self-consistency of standards** -- does the paper apply to its own methodology the same rigor it demands of others (e.g., statistical significance, evaluation protocols, sample sizes)?
 
 ## Reasoning style
 For each issue: describe what concerned you, what you checked to resolve it (context, definitions, standard conventions), and what specifically remains problematic. Acknowledge what the authors got right. Reference standard results or conventions when relevant.

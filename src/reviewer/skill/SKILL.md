@@ -106,7 +106,7 @@ Read `./review_results/<slug>_review/sections/index.json`. Based on Pass A, plan
 - Each gets a primary section file and 1-3 related section files for cross-references
 - Group small or closely related sections together (e.g., Abstract + Introduction)
 
-**Cross-cutting sub-agents** (up to 5, chosen based on what the paper needs):
+**Cross-cutting sub-agents** (2-4, chosen based on what the paper needs):
 - "Do abstract/introduction claims match evidence in results?"
 - "Are evaluation comparisons fair and consistent?"
 - "Do stated limitations and mitigations hold up?"
@@ -133,13 +133,14 @@ After all complete, mark sub-tasks done.
 python3 $SKILL_DIR/scripts/consolidate_comments.py ./review_results/<slug>_review
 ```
 
-### 4b — Deduplicate and validate
+### 4b — Deduplicate, merge, and validate
 
 Review the merged list:
 
-- **Remove duplicates**: keep the better-explained one.
+- **Merge by root cause**: two comments share a root cause if fixing the underlying issue would resolve both. When multiple comments share a root cause (even if they have different quotes or emphasize different consequences), **merge them into one comment** that makes the strongest version of the argument, incorporating evidence from all. The merged comment should be the one an author most needs to hear.
 - **Remove false positives**: issues resolved by context, conventions, or leniency rules.
 - **Verify quotes**: confirm each quote appears in the paper text.
+- **Enforce comment_type**: every comment must use `"technical"` or `"logical"` as defined in criteria.md. Reclassify any that drifted to other labels.
 
 **Do not drop issues just because they feel minor.** When uncertain, keep the issue but note the uncertainty.
 
@@ -149,7 +150,7 @@ Review the merged list:
 - **moderate** — Real error or gap that is localized and fixable.
 - **minor** — Framing concern, mild overclaim, or ambiguity resolvable from context.
 
-**Calibration**: most papers have a mix. Reconsider if all issues are one tier.
+**Calibration**: A well-calibrated review of a publishable paper typically has 2-5 major issues. If you have more than 6 major issues, re-examine each: a major issue must threaten a **paper-level conclusion**, not just a single claim or paragraph. A missing justification for a parameter is moderate unless that parameter directly determines a headline finding. A design choice that could reasonably have gone differently is moderate unless the current choice demonstrably biases results in the paper's favor. Most papers should have a mix of tiers — reconsider if all issues cluster in one.
 
 ---
 
@@ -173,7 +174,12 @@ Write the final issues and overall assessment to the workspace, then run the viz
 
 1. **Write** the consolidated issues (after dedup/tiering) as a JSON array to `./review_results/<slug>_review/final_issues.json`. Each object needs: `title`, `quote`, `explanation`, `comment_type`, `severity`.
 
-2. **Write** a comprehensive overall assessment (multiple sentences covering quality, clarity, methodology, and most significant concerns) to `./review_results/<slug>_review/overall_assessment.txt`. This is what users see in the viz UI, so be thorough.
+2. **Write** the overall assessment to `./review_results/<slug>_review/overall_assessment.txt`. This is the first thing users see in the viz UI. Keep it to **one short paragraph** (3-5 sentences, ~150 words). It should:
+   - State whether the core contribution is sound and worth revising
+   - Name the 2-3 most important problems (by reference, not full re-explanation — the comments have the details)
+   - Give a calibrated bottom-line judgment (e.g., "these issues are fixable" vs "fundamental concerns")
+
+   Do NOT restate all findings as prose — that's what the comment list is for.
 
 3. **Run**:
 ```bash
