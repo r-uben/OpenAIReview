@@ -106,7 +106,7 @@ Read `./review_results/<slug>_review/sections/index.json`. Based on Pass A, plan
 - Each gets a primary section file and 1-3 related section files for cross-references
 - Group small or closely related sections together (e.g., Abstract + Introduction)
 
-**Cross-cutting sub-agents** (2-4, chosen based on what the paper needs):
+**Cross-cutting sub-agents** (3-5, chosen based on what the paper needs):
 - "Do abstract/introduction claims match evidence in results?"
 - "Are evaluation comparisons fair and consistent?"
 - "Do stated limitations and mitigations hold up?"
@@ -137,10 +137,10 @@ python3 $SKILL_DIR/scripts/consolidate_comments.py ./review_results/<slug>_revie
 
 Review the merged list:
 
-- **Merge by root cause**: two comments share a root cause if fixing the underlying issue would resolve both. When multiple comments share a root cause (even if they have different quotes or emphasize different consequences), **merge them into one comment** that makes the strongest version of the argument, incorporating evidence from all. The merged comment should be the one an author most needs to hear.
+- **Merge by root cause**: two comments share a root cause if fixing the underlying issue would resolve both. When multiple comments share a root cause, **merge them into one comment** that makes the strongest version of the argument, incorporating evidence from all. However, keep issues **separate** when they require different fixes or affect different paper-level conclusions — even if they stem from the same design decision. For example, "AND-logic inflates failure counts" and "AND-logic makes agreement figures unfair" share a root cause but affect different claims and should remain separate.
 - **Remove false positives**: issues resolved by context, conventions, or leniency rules.
 - **Verify quotes**: confirm each quote appears in the paper text.
-- **Enforce comment_type**: every comment must use `"technical"` or `"logical"` as defined in criteria.md. Reclassify any that drifted to other labels.
+- **Assign comment_type**: use `"methodology"`, `"claim_accuracy"`, `"presentation"`, or `"missing_information"`. Choose the type that best tells an author *what kind of fix is needed*. Sub-agents may output `"technical"`/`"logical"` — reclassify to the 4-type scheme during consolidation.
 
 **Do not drop issues just because they feel minor.** When uncertain, keep the issue but note the uncertainty.
 
@@ -150,7 +150,7 @@ Review the merged list:
 - **moderate** — Real error or gap that is localized and fixable.
 - **minor** — Framing concern, mild overclaim, or ambiguity resolvable from context.
 
-**Calibration**: A well-calibrated review of a publishable paper typically has 2-5 major issues. If you have more than 6 major issues, re-examine each: a major issue must threaten a **paper-level conclusion**, not just a single claim or paragraph. A missing justification for a parameter is moderate unless that parameter directly determines a headline finding. A design choice that could reasonably have gone differently is moderate unless the current choice demonstrably biases results in the paper's favor. Most papers should have a mix of tiers — reconsider if all issues cluster in one.
+**Calibration**: A well-calibrated review of a publishable paper typically has 3-7 major issues. If you have more than 8, re-examine each: a major issue must threaten a **paper-level conclusion**, not just a single claim or paragraph. But do not under-count — if a paper has genuinely many independent validity threats (e.g., flawed evaluation protocol AND misleading statistics AND unacknowledged conflicts), each deserves a major. A missing justification for a parameter is moderate unless that parameter directly determines a headline finding. A design choice that could reasonably have gone differently is moderate unless the current choice demonstrably biases results in the paper's favor. Most papers should have a mix of tiers — reconsider if all issues cluster in one.
 
 ---
 

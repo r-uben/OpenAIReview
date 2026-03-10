@@ -21,8 +21,8 @@ Other sections are available at <REVIEW_DIR>/sections/ if you encounter cross-re
 ## Your specific focus
 <ONE_SENTENCE_FOCUS — e.g., "Scrutinize Section 4 (Results) for numerical consistency, unsupported claims, and whether evidence actually supports the methodology described in Section 3.">
 
-## Quality over quantity
-When you find multiple issues that share a root cause or compound each other's impact, **combine them into a single finding** that explains how they interact. A compound argument ("A + B + C together mean X") is more valuable than three separate observations. Aim for depth of reasoning, not number of findings.
+## Depth and coverage
+Favor well-developed arguments over surface observations. When issues share a root cause or compound each other, **combine them into a single finding** that explains how they interact. But do not suppress genuinely independent issues — if fixing one would not fix the other, report them separately. Aim for thoroughness with depth: every real issue should appear, and each should be well-reasoned.
 
 ## Output
 Write your findings as a JSON array to:
@@ -51,8 +51,8 @@ Other sections are available at <REVIEW_DIR>/sections/ if needed.
 ## Your specific focus
 <ONE_SENTENCE_FOCUS — e.g., "Check whether the abstract and introduction claims are fully supported by the evidence presented in the results and appendices. Flag any overstatements, missing caveats, or claims that depend on unstated assumptions.">
 
-## Quality over quantity
-Your goal is not to find every instance of your pattern, but to make the **strongest possible version** of the most important arguments. One well-developed finding with a clear logical chain is worth more than five surface observations. When multiple observations share a root cause, combine them into a single compound argument.
+## Depth and coverage
+Make the **strongest possible version** of the most important arguments. Combine observations that share a root cause into compound arguments. But report independent issues separately — do not merge findings that require different fixes or threaten different conclusions. Thoroughness matters: missing a real issue is worse than reporting one extra.
 
 ## Output
 Write your findings as a JSON array to:
@@ -65,7 +65,7 @@ Return a brief summary: how many issues found and a one-line title for each.
 
 ## Suggested cross-cutting checks
 
-Pick 2-3 based on what the paper needs:
+Pick 3-5 based on what the paper needs:
 
 - **Claims vs evidence**: Do abstract/introduction claims match the evidence in the results?
 - **Evaluation fairness**: Are comparisons fair and consistent across conditions?
