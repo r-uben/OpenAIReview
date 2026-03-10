@@ -46,9 +46,10 @@ def cmd_review(args: argparse.Namespace) -> None:
     from .utils import split_into_paragraphs
 
     source = args.file
+    ocr = getattr(args, "ocr", None)
     if is_url(source):
         print(f"Fetching and parsing URL...")
-        title, content = parse_document(source)
+        title, content, was_ocr = parse_document(source, ocr=ocr)
         # Derive slug from URL: use the arxiv ID or last path segment
         default_slug = source.rstrip("/").split("/")[-1]
     else:
@@ -57,7 +58,7 @@ def cmd_review(args: argparse.Namespace) -> None:
             print(f"Error: file not found: {file_path}", file=sys.stderr)
             sys.exit(1)
         print(f"Parsing {file_path.name}...")
-        title, content = parse_document(file_path)
+        title, content, was_ocr = parse_document(file_path, ocr=ocr)
         fmt = file_path.suffix.lstrip(".").lower()
         default_slug = f"{file_path.stem}-{fmt}" if fmt else file_path.stem
         if fmt:
@@ -68,6 +69,11 @@ def cmd_review(args: argparse.Namespace) -> None:
     slug = args.name or slugify(default_slug)
     paragraphs = split_into_paragraphs(content)
     print(f"  {len(paragraphs)} paragraphs")
+
+    if was_ocr:
+        from .prompts import OCR_CAVEAT
+        content = f"[{OCR_CAVEAT}]\n\n{content}"
+        print("  Source: OCR (notation auto-correction applied)")
 
     method = args.method
     print(f"Running method: {method}...")
@@ -240,6 +246,12 @@ def main() -> None:
         choices=["none", "low", "medium", "high"],
         default=None,
         help="Reasoning effort level (default: adaptive/auto)",
+    )
+    review_parser.add_argument(
+        "--ocr",
+        choices=["mistral", "marker", "pymupdf"],
+        default=None,
+        help="PDF OCR engine (default: auto — tries mistral, marker, pymupdf)",
     )
 
     # serve subcommand
