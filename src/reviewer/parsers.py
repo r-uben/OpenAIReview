@@ -1,5 +1,7 @@
 """Document parsers for PDF, DOCX, TEX, TXT, MD files, and arXiv HTML URLs."""
 
+import base64
+import os
 import re
 from pathlib import Path
 
@@ -9,36 +11,74 @@ def is_url(s: str) -> bool:
     return s.startswith("http://") or s.startswith("https://")
 
 
-def parse_document(file_path: str | Path) -> tuple[str, str]:
-    """Parse a document file or URL and return (title, full_text).
+def parse_document(
+    file_path: str | Path,
+    ocr: str | None = None,
+    figures_dir: Path | None = None,
+) -> tuple[str, str, bool]:
+    """Parse a document file or URL and return (title, full_text, was_ocr).
 
     Supported formats: .pdf, .docx, .tex, .txt, .md
     Also supports arXiv HTML URLs (e.g. https://arxiv.org/html/2310.06825).
+
+    ocr: PDF OCR engine -- "mistral", "marker", "pymupdf", or None (auto).
+    figures_dir: if provided, save extracted figures here (Mistral OCR only).
+    was_ocr: True if the text went through OCR (PDF parsing), False otherwise.
     """
     path_str = str(file_path)
 
     if is_url(path_str):
         if "arxiv.org/abs/" in path_str:
-            return _parse_arxiv_abs(path_str)
-        return parse_arxiv_html(path_str)
+            title, text = _parse_arxiv_abs(path_str, ocr=ocr)
+            return title, text, False
+        title, text = parse_arxiv_html(path_str)
+        return title, text, False
 
     path = Path(file_path)
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
-        return _parse_pdf(path)
+        title, text = _parse_pdf(path, ocr=ocr, figures_dir=figures_dir)
+        from .ocr_postprocess import fix_ocr_notation
+        text, corrections = fix_ocr_notation(text)
+        for c in corrections:
+            print(f"  OCR fix: {c['old']} -> {c['new']} ({c['reason']})")
+        return title, text, True
     elif suffix == ".docx":
-        return _parse_docx(path)
+        title, text = _parse_docx(path)
+        return title, text, False
     elif suffix == ".tex":
-        return _parse_tex(path)
+        title, text = _parse_tex(path)
+        return title, text, False
     elif suffix in (".txt", ".md", ".markdown"):
-        return _parse_text(path)
+        title, text, was_ocr = _parse_text(path)
+        return title, text, was_ocr
     else:
         raise ValueError(f"Unsupported file format: {suffix}")
 
 
-def _parse_pdf(path: Path) -> tuple[str, str]:
-    """Extract text from PDF. Uses Marker CLI if available (better math), else pymupdf."""
+def _parse_pdf(
+    path: Path, ocr: str | None = None, figures_dir: Path | None = None
+) -> tuple[str, str]:
+    """Extract text from PDF.
+
+    Engine priority (when ocr=None): Mistral OCR -> Marker -> PyMuPDF.
+    Set ocr="mistral", "marker", or "pymupdf" to force a specific engine.
+    """
+    if ocr == "mistral":
+        return _parse_pdf_mistral(path, figures_dir=figures_dir)
+    elif ocr == "marker":
+        return _parse_pdf_marker(path)
+    elif ocr == "pymupdf":
+        return _parse_pdf_pymupdf(path)
+
+    # Auto: try Mistral OCR first (best quality), then Marker, then PyMuPDF
+    if os.environ.get("MISTRAL_API_KEY"):
+        try:
+            return _parse_pdf_mistral(path, figures_dir=figures_dir)
+        except Exception as e:
+            print(f"  Mistral OCR failed ({e}), trying Marker...")
+
     try:
         return _parse_pdf_marker(path)
     except (ImportError, FileNotFoundError, RuntimeError) as e:
@@ -46,6 +86,107 @@ def _parse_pdf(path: Path) -> tuple[str, str]:
         print("  Note: pymupdf cannot extract math symbols correctly. "
               "For math-heavy PDFs, use .tex source or arXiv HTML.")
         return _parse_pdf_pymupdf(path)
+
+
+def _parse_pdf_mistral(path: Path, figures_dir: Path | None = None) -> tuple[str, str]:
+    """High-quality PDF extraction using Mistral OCR API.
+
+    Sends the full PDF and returns concatenated markdown from all pages.
+    Preserves math (LaTeX), tables, and document structure.
+
+    If figures_dir is provided, saves extracted images there and rewrites
+    image references in the markdown to point to ./figures/.
+
+    Cost: ~$0.001 per page.
+
+    See also: https://github.com/r-uben/mistral-ocr-cli
+    """
+    from mistralai.client.sdk import Mistral
+
+    api_key = os.environ.get("MISTRAL_API_KEY")
+    if not api_key:
+        raise RuntimeError("MISTRAL_API_KEY not set")
+
+    pdf_bytes = path.read_bytes()
+    b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    data_uri = f"data:application/pdf;base64,{b64}"
+
+    include_images = figures_dir is not None
+
+    print(f"  Running Mistral OCR on {path.name}...")
+    client = Mistral(api_key=api_key)
+
+    ocr_kwargs = {
+        "model": "mistral-ocr-latest",
+        "document": {"type": "document_url", "document_url": data_uri},
+        "include_image_base64": include_images,
+    }
+    try:
+        response = client.ocr.process(
+            **ocr_kwargs,
+            table_format="markdown",
+            extract_header=True,
+            extract_footer=True,
+        )
+    except TypeError:
+        # Fallback if SDK doesn't support newer params yet
+        response = client.ocr.process(
+            model=ocr_kwargs["model"],
+            document=ocr_kwargs["document"],
+            include_image_base64=include_images,
+        )
+
+    # Save images and build a mapping from OCR IDs to local paths
+    image_map: dict[str, str] = {}
+    n_images = 0
+    if figures_dir is not None:
+        for page in response.pages:
+            images = getattr(page, "images", None) or []
+            for idx, img in enumerate(images):
+                b64_data = getattr(img, "image_base64", None)
+                if not b64_data:
+                    continue
+                img_id = getattr(img, "id", None) or f"img-{idx}"
+                ext = Path(img_id).suffix if "." in str(img_id) else ".png"
+                filename = f"page{page.index + 1}_img{idx + 1}{ext}"
+                save_path = figures_dir / filename
+                figures_dir.mkdir(parents=True, exist_ok=True)
+                save_path.write_bytes(base64.b64decode(b64_data))
+                image_map[img_id] = f"figures/{filename}"
+                n_images += 1
+
+    # Concatenate page markdowns with table content
+    pages = []
+    for page in response.pages:
+        page_parts = []
+        if hasattr(page, "markdown") and page.markdown:
+            page_parts.append(page.markdown)
+        if hasattr(page, "tables") and page.tables:
+            for table in page.tables:
+                table_md = (
+                    getattr(table, "content", None)
+                    or getattr(table, "markdown", None)
+                )
+                if table_md:
+                    page_parts.append(table_md)
+        if page_parts:
+            pages.append("\n\n".join(page_parts))
+
+    if not pages:
+        raise RuntimeError("Mistral OCR returned no content")
+
+    markdown = "\n\n".join(pages)
+
+    # Rewrite image references to point to saved files
+    for img_id, local_path in image_map.items():
+        markdown = markdown.replace(f"]({img_id})", f"]({local_path})")
+
+    n_pages = len(response.pages)
+    extras = f", {n_images} figures" if n_images else ""
+    print(f"  Mistral OCR: {n_pages} pages extracted{extras} (~${n_pages * 0.001:.3f})")
+
+    title = _extract_title_from_markdown(markdown)
+    return title, markdown
 
 
 def _parse_pdf_marker(path: Path) -> tuple[str, str]:
@@ -222,26 +363,44 @@ def _parse_tex(path: Path) -> tuple[str, str]:
     return title, text
 
 
-def _parse_text(path: Path) -> tuple[str, str]:
-    """Extract text from plain text or markdown."""
-    text = path.read_text(encoding="utf-8", errors="replace")
+def _parse_text(path: Path) -> tuple[str, str, bool]:
+    """Extract text from plain text or markdown.
+
+    Detects YAML frontmatter with ocr_engine field (produced by `extract`).
+    Returns (title, text_without_frontmatter, was_ocr).
+    """
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    was_ocr = False
     title = ""
 
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        # Markdown heading
-        if stripped.startswith("#"):
-            title = stripped.lstrip("# ").strip()
-        else:
-            title = stripped[:200]
-        break
+    # Detect and parse YAML frontmatter
+    text = raw
+    if raw.startswith("---\n"):
+        end = raw.find("\n---\n", 4)
+        if end != -1:
+            frontmatter = raw[4:end]
+            text = raw[end + 5:]  # skip past closing ---\n
+            for line in frontmatter.split("\n"):
+                if line.startswith("title:"):
+                    title = line.split(":", 1)[1].strip().strip('"')
+                if line.startswith("ocr_engine:"):
+                    was_ocr = True
 
-    return title, text
+    if not title:
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#"):
+                title = stripped.lstrip("# ").strip()
+            else:
+                title = stripped[:200]
+            break
+
+    return title, text, was_ocr
 
 
-def _parse_arxiv_abs(url: str) -> tuple[str, str]:
+def _parse_arxiv_abs(url: str, ocr: str | None = None) -> tuple[str, str]:
     """Parse an arXiv abs URL: try HTML first, fall back to PDF."""
     html_url = re.sub(r"arxiv\.org/abs/", "arxiv.org/html/", url)
     try:
@@ -249,10 +408,10 @@ def _parse_arxiv_abs(url: str) -> tuple[str, str]:
     except Exception as e:
         print(f"HTML version not available ({e}), falling back to PDF...")
 
-    return _fetch_arxiv_pdf(url)
+    return _fetch_arxiv_pdf(url, ocr=ocr)
 
 
-def _fetch_arxiv_pdf(url: str) -> tuple[str, str]:
+def _fetch_arxiv_pdf(url: str, ocr: str | None = None) -> tuple[str, str]:
     """Fetch a PDF from an arXiv abs URL and parse it.
 
     Converts https://arxiv.org/abs/<id> to https://arxiv.org/pdf/<id>.
@@ -275,7 +434,7 @@ def _fetch_arxiv_pdf(url: str) -> tuple[str, str]:
         tmp_path = Path(tmp.name)
 
     try:
-        return _parse_pdf(tmp_path)
+        return _parse_pdf(tmp_path, ocr=ocr)
     finally:
         tmp_path.unlink(missing_ok=True)
 
