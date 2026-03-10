@@ -45,6 +45,11 @@ def cmd_review(args: argparse.Namespace) -> None:
     from .parsers import is_url, parse_document
     from .utils import split_into_paragraphs
 
+    # Set provider env var early so client.get_client() picks it up
+    provider = getattr(args, "provider", None)
+    if provider:
+        os.environ["REVIEW_PROVIDER"] = provider
+
     source = args.file
     ocr = getattr(args, "ocr", None)
     if is_url(source):
@@ -232,6 +237,12 @@ def main() -> None:
     review_parser.add_argument(
         "--model", default=DEFAULT_MODEL,
         help="Model to use (default: anthropic/claude-opus-4-6)",
+    )
+    review_parser.add_argument(
+        "--provider",
+        choices=["openrouter", "openai", "anthropic", "gemini", "mistral"],
+        default=None,
+        help="LLM provider (default: auto-detect from API keys, or REVIEW_PROVIDER env var)",
     )
     review_parser.add_argument(
         "--output-dir", default="./review_results",

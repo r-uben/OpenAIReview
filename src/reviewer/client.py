@@ -1,4 +1,4 @@
-"""API client with support for OpenRouter, OpenAI, Anthropic, and Gemini."""
+"""API client with support for OpenRouter, OpenAI, Anthropic, Gemini, and Mistral."""
 
 import os
 import sys
@@ -13,25 +13,91 @@ except ImportError:
     pass
 
 # Provider configs: (env_var, base_url or None for default, provider_name, model_prefix_to_strip)
-PROVIDERS = [
-    ("OPENROUTER_API_KEY", "https://openrouter.ai/api/v1", "openrouter", None),
-    ("OPENAI_API_KEY", None, "openai", None),
-    ("ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/", "anthropic", "anthropic/"),
-    ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini", "google/"),
-]
+PROVIDERS = {
+    "openrouter": ("OPENROUTER_API_KEY", "https://openrouter.ai/api/v1", None),
+    "openai": ("OPENAI_API_KEY", None, None),
+    "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/", "anthropic/"),
+    "gemini": ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/", "google/"),
+    "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1", "mistralai/"),
+}
+
+# Auto-detection priority order
+PROVIDER_PRIORITY = ["openrouter", "openai", "anthropic", "gemini", "mistral"]
+
+# Model prefix → native provider mapping (for smart auto-detection)
+MODEL_VENDOR_TO_PROVIDER = {
+    "anthropic/": "anthropic",
+    "google/": "gemini",
+    "mistralai/": "mistral",
+    "openai/": "openai",
+}
 
 
-def get_client() -> tuple[OpenAI, str, str | None]:
-    """Return (client, provider_name, prefix_to_strip) for the first available API key."""
-    for env_var, base_url, provider, prefix in PROVIDERS:
+def _make_client(name: str) -> tuple[OpenAI, str, str | None]:
+    """Build an OpenAI client for a known, available provider."""
+    env_var, base_url, prefix = PROVIDERS[name]
+    api_key = os.environ.get(env_var)
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return OpenAI(**kwargs), name, prefix
+
+
+def get_client(provider: str | None = None, model: str | None = None) -> tuple[OpenAI, str, str | None]:
+    """Return (client, provider_name, prefix_to_strip) for the given or auto-detected provider.
+
+    Provider resolution order:
+      1. Explicit `provider` argument
+      2. REVIEW_PROVIDER env var
+      3. Model-aware auto-detect: if the model has a vendor prefix (e.g. "anthropic/"),
+         prefer that vendor's native API when available
+      4. Fallback: first available API key in priority order
+    """
+    # Resolve provider name
+    requested = provider or os.environ.get("REVIEW_PROVIDER")
+    if requested:
+        requested = requested.lower().strip()
+        if requested not in PROVIDERS:
+            print(
+                f"Error: Unknown provider '{requested}'.\n"
+                f"Available: {', '.join(PROVIDERS.keys())}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        env_var, base_url, prefix = PROVIDERS[requested]
         api_key = os.environ.get(env_var)
-        if api_key:
-            kwargs = {"api_key": api_key}
-            if base_url:
-                kwargs["base_url"] = base_url
+        if not api_key:
+            print(
+                f"Error: Provider '{requested}' selected but {env_var} is not set.\n"
+                f"Set it in your environment or .env file.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        display = requested.replace("_", " ").title()
+        print(f"  Using {display} API")
+        return OpenAI(**kwargs), requested, prefix
+
+    # Model-aware auto-detect: if model has a vendor prefix, try matching provider first
+    if model:
+        for prefix, prov_name in MODEL_VENDOR_TO_PROVIDER.items():
+            if model.startswith(prefix):
+                env_var, _, _ = PROVIDERS[prov_name]
+                if os.environ.get(env_var):
+                    display = prov_name.replace("_", " ").title()
+                    print(f"  Using {display} API (matched model prefix '{prefix}')")
+                    return _make_client(prov_name)
+                break  # prefix matched but key missing — fall through
+
+    # Fallback: try each provider in priority order
+    for name in PROVIDER_PRIORITY:
+        env_var, _, _ = PROVIDERS[name]
+        if os.environ.get(env_var):
             display = env_var.replace("_API_KEY", "").replace("_", " ").title()
-            print(f"  Using {display} API")
-            return OpenAI(**kwargs), provider, prefix
+            print(f"  Using {display} API (auto-detected)")
+            return _make_client(name)
 
     print(
         "Error: No API key found.\n\n"
@@ -39,7 +105,8 @@ def get_client() -> tuple[OpenAI, str, str | None]:
         "  export OPENROUTER_API_KEY=...   # OpenRouter (supports all models)\n"
         "  export OPENAI_API_KEY=...       # OpenAI native\n"
         "  export ANTHROPIC_API_KEY=...    # Anthropic native\n"
-        "  export GEMINI_API_KEY=...       # Google Gemini native\n\n"
+        "  export GEMINI_API_KEY=...       # Google Gemini native\n"
+        "  export MISTRAL_API_KEY=...      # Mistral native\n\n"
         "Or create a .env file in your working directory.\n"
         "See .env.example for a template.",
         file=sys.stderr,
@@ -73,6 +140,7 @@ def _apply_reasoning(kwargs: dict, provider: str, reasoning_effort: str, max_tok
         kwargs["reasoning_effort"] = reasoning_effort
     elif provider == "gemini":
         kwargs["extra_body"] = {"thinking": {"type": "enabled", "budget_tokens": budget}}
+    # Mistral: no reasoning token support as of 2026-03
 
 
 def chat(
@@ -82,10 +150,15 @@ def chat(
     max_tokens: int = 16384,
     reasoning_effort: str | None = None,
     retries: int = 3,
+    provider: str | None = None,
 ) -> tuple[str, dict]:
     """Call a chat API. Returns (response_text, usage_dict).
 
-    Automatically selects the provider based on available API keys.
+    Provider resolution order:
+      1. Explicit `provider` argument
+      2. REVIEW_PROVIDER env var
+      3. Auto-detect from available API keys
+
     Model names with provider prefixes (e.g. "anthropic/claude-opus-4-6")
     are stripped when using native APIs.
 
@@ -94,7 +167,7 @@ def chat(
     If the response is empty (e.g. reasoning consumed all tokens), retries
     with doubled max_tokens up to EMPTY_RESPONSE_MAX_RETRIES times.
     """
-    client, provider, prefix_to_strip = get_client()
+    client, resolved_provider, prefix_to_strip = get_client(provider, model=model)
     api_model = model
     if prefix_to_strip and api_model.startswith(prefix_to_strip):
         api_model = api_model[len(prefix_to_strip):]
@@ -113,7 +186,7 @@ def chat(
                 if temperature is not None:
                     kwargs["temperature"] = temperature
                 if reasoning_effort is not None and reasoning_effort != "none":
-                    _apply_reasoning(kwargs, provider, reasoning_effort, current_max_tokens)
+                    _apply_reasoning(kwargs, resolved_provider, reasoning_effort, current_max_tokens)
                 resp = client.chat.completions.create(**kwargs)
                 usage = {
                     "prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
