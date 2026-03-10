@@ -133,9 +133,24 @@ After all complete, mark sub-tasks done.
 python3 $SKILL_DIR/scripts/consolidate_comments.py ./review_results/<slug>_review
 ```
 
+The script prints a compact title list to stdout (one line per comment, always small enough to read inline — never truncated). It also writes `./review_results/<slug>_review/comments/all_comments.json` with the full text of every comment, indexed by `_index`.
+
+Read the title list from stdout to identify duplicates and plan merges. To fetch the full explanation of a specific comment (e.g., index 7):
+
+```bash
+python3 -c "
+import json
+it = json.load(open('./review_results/<slug>_review/comments/all_comments.json'))[7]
+print(it['title'])
+print(it['explanation'])
+"
+```
+
+Only fetch full text for issues you intend to keep or inspect closely. You do not need to read all 50–60 comments in full — the title list is sufficient to spot duplicates and root-cause groups.
+
 ### 4b — Deduplicate, merge, and validate
 
-Review the merged list:
+Review the title list:
 
 - **Merge by root cause**: two comments share a root cause if fixing the underlying issue would resolve both. When multiple comments share a root cause, **merge them into one comment** that makes the strongest version of the argument, incorporating evidence from all. However, keep issues **separate** when they require different fixes or affect different paper-level conclusions — even if they stem from the same design decision. For example, "AND-logic inflates failure counts" and "AND-logic makes agreement figures unfair" share a root cause but affect different claims and should remain separate.
 - **Remove false positives**: issues resolved by context, conventions, or leniency rules.
