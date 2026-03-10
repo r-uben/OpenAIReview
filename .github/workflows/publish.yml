@@ -1,12 +1,12 @@
-name: Publish to PyPI
+name: Auto-tag and publish on version bump
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    paths: [pyproject.toml]
 
 jobs:
-  publish:
+  tag-and-publish:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -14,10 +14,32 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Check for version change
+        id: version
+        run: |
+          NEW=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          OLD=$(git show HEAD~1:pyproject.toml 2>/dev/null | grep '^version' | head -1 | sed 's/.*"\(.*\)"/\1/' || echo "")
+          echo "new=$NEW old=$OLD"
+          if [ "$NEW" != "$OLD" ] && [ -n "$NEW" ]; then
+            echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create tag
+        if: steps.version.outputs.tag
+        run: |
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
       - uses: astral-sh/setup-uv@v5
-      - run: uv build
+        if: steps.version.outputs.tag
+      - name: Build
+        if: steps.version.outputs.tag
+        run: uv build
       - name: Create GitHub Release
-        run: gh release create ${{ github.ref_name }} dist/* --title "${{ github.ref_name }}" --generate-notes
+        if: steps.version.outputs.tag
+        run: gh release create ${{ steps.version.outputs.tag }} dist/* --title "${{ steps.version.outputs.tag }}" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        if: steps.version.outputs.tag
+        uses: pypa/gh-action-pypi-publish@release/v1
