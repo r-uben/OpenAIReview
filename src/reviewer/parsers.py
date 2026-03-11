@@ -12,14 +12,17 @@ def is_url(s: str) -> bool:
 
 
 def parse_document(
-    file_path: str | Path, ocr: str | None = None
+    file_path: str | Path,
+    ocr: str | None = None,
+    figures_dir: Path | None = None,
 ) -> tuple[str, str, bool]:
     """Parse a document file or URL and return (title, full_text, was_ocr).
 
     Supported formats: .pdf, .docx, .tex, .txt, .md
     Also supports arXiv HTML URLs (e.g. https://arxiv.org/html/2310.06825).
 
-    ocr: PDF OCR engine — "mistral", "marker", "pymupdf", or None (auto).
+    ocr: PDF OCR engine -- "mistral", "deepseek", "marker", "pymupdf", or None (auto).
+    figures_dir: if provided, save extracted figures here (Mistral/DeepSeek OCR).
     was_ocr: True if the text went through OCR (PDF parsing), False otherwise.
     """
     path_str = str(file_path)
@@ -37,7 +40,7 @@ def parse_document(
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
-        title, text = _parse_pdf(path, ocr=ocr)
+        title, text = _parse_pdf(path, ocr=ocr, figures_dir=figures_dir)
         # Post-process OCR output: fix notation errors
         from .ocr_postprocess import fix_ocr_notation
         text, corrections = fix_ocr_notation(text)
@@ -57,25 +60,34 @@ def parse_document(
         raise ValueError(f"Unsupported file format: {suffix}")
 
 
-def _parse_pdf(path: Path, ocr: str | None = None) -> tuple[str, str]:
+def _parse_pdf(
+    path: Path, ocr: str | None = None, figures_dir: Path | None = None
+) -> tuple[str, str]:
     """Extract text from PDF.
 
-    Engine priority (when ocr=None): Mistral OCR → Marker → PyMuPDF.
-    Set ocr="mistral", "marker", or "pymupdf" to force a specific engine.
+    Engine priority (when ocr=None): Mistral OCR -> DeepSeek -> Marker -> PyMuPDF.
+    Set ocr="mistral", "deepseek", "marker", or "pymupdf" to force a specific engine.
     """
     if ocr == "mistral":
-        return _parse_pdf_mistral(path)
+        return _parse_pdf_mistral(path, figures_dir=figures_dir)
+    elif ocr == "deepseek":
+        return _parse_pdf_deepseek(path, figures_dir=figures_dir)
     elif ocr == "marker":
         return _parse_pdf_marker(path)
     elif ocr == "pymupdf":
         return _parse_pdf_pymupdf(path)
 
-    # Auto: try Mistral OCR first (best quality), then Marker, then PyMuPDF
+    # Auto: try Mistral OCR first (best quality), then DeepSeek, Marker, PyMuPDF
     if os.environ.get("MISTRAL_API_KEY"):
         try:
-            return _parse_pdf_mistral(path)
+            return _parse_pdf_mistral(path, figures_dir=figures_dir)
         except Exception as e:
-            print(f"  Mistral OCR failed ({e}), trying Marker...")
+            print(f"  Mistral OCR failed ({e}), trying next engine...")
+
+    try:
+        return _parse_pdf_deepseek(path, figures_dir=figures_dir)
+    except (ImportError, ConnectionError, RuntimeError) as e:
+        print(f"  DeepSeek OCR not available ({e}), trying Marker...")
 
     try:
         return _parse_pdf_marker(path)
@@ -86,44 +98,63 @@ def _parse_pdf(path: Path, ocr: str | None = None) -> tuple[str, str]:
         return _parse_pdf_pymupdf(path)
 
 
-def _parse_pdf_mistral(path: Path) -> tuple[str, str]:
-    """High-quality PDF extraction using Mistral OCR API (v3).
+def _parse_pdf_mistral(path: Path, figures_dir: Path | None = None) -> tuple[str, str]:
+    """High-quality PDF extraction using Mistral OCR via mistral-ocr-cli.
 
-    Sends the full PDF and returns concatenated markdown from all pages.
-    Preserves math (LaTeX), tables, and document structure.
-    Extracts tables in markdown format and includes headers/footers.
+    Uses the OCRProcessor from mistral-ocr-cli, which provides:
+    - Automatic retry with exponential backoff on transient errors
+    - PDF chunking for documents >1000 pages
+    - File upload API (avoids base64 size limits)
+    - Figure extraction
+
     Cost: ~$0.001 per page.
+    See also: https://github.com/r-uben/mistral-ocr-cli
     """
-    from mistralai.client.sdk import Mistral
+    from mistral_ocr import Config, OCRProcessor
 
     api_key = os.environ.get("MISTRAL_API_KEY")
     if not api_key:
         raise RuntimeError("MISTRAL_API_KEY not set")
 
-    # Encode PDF as base64 data URI
-    pdf_bytes = path.read_bytes()
-    b64 = base64.b64encode(pdf_bytes).decode("ascii")
-    data_uri = f"data:application/pdf;base64,{b64}"
+    config = Config(
+        api_key=api_key,
+        model="mistral-ocr-latest",
+        include_images=figures_dir is not None,
+        table_format="markdown",
+        extract_header=True,
+        extract_footer=True,
+        include_metadata=False,
+        include_page_headings=False,
+        quiet=True,
+    )
 
     print(f"  Running Mistral OCR on {path.name}...")
-    client = Mistral(api_key=api_key)
+    processor = OCRProcessor(config)
+    result = processor.process_file(path)
 
-    # Use OCR 3 features: table extraction + headers/footers
-    ocr_kwargs = {
-        "model": "mistral-ocr-latest",
-        "document": {"type": "document_url", "document_url": data_uri},
-    }
-    # Table extraction (OCR 3) — request markdown format for inline inclusion
-    try:
-        response = client.ocr.process(
-            **ocr_kwargs,
-            table_format="markdown",
-            extract_header=True,
-            extract_footer=True,
-        )
-    except TypeError:
-        # Fallback if SDK doesn't support OCR 3 params yet
-        response = client.ocr.process(**ocr_kwargs)
+    if not result or not result.get("success"):
+        raise RuntimeError("Mistral OCR processing failed")
+
+    response = result["response"]
+
+    # Save images and build a mapping from OCR IDs to local paths
+    image_map: dict[str, str] = {}
+    n_images = 0
+    if figures_dir is not None:
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        for page in response.pages:
+            images = getattr(page, "images", None) or []
+            for idx, img in enumerate(images):
+                b64_data = getattr(img, "image_base64", None)
+                if not b64_data:
+                    continue
+                img_id = getattr(img, "id", None) or f"img-{idx}"
+                ext = Path(img_id).suffix if "." in str(img_id) else ".png"
+                filename = f"page{page.index + 1}_img{idx + 1}{ext}"
+                save_path = figures_dir / filename
+                save_path.write_bytes(base64.b64decode(b64_data))
+                image_map[img_id] = f"figures/{filename}"
+                n_images += 1
 
     # Concatenate page markdowns with table content
     pages = []
@@ -131,8 +162,6 @@ def _parse_pdf_mistral(path: Path) -> tuple[str, str]:
         page_parts = []
         if hasattr(page, "markdown") and page.markdown:
             page_parts.append(page.markdown)
-
-        # Append extracted tables (OCR 3)
         if hasattr(page, "tables") and page.tables:
             for table in page.tables:
                 table_md = (
@@ -141,7 +170,6 @@ def _parse_pdf_mistral(path: Path) -> tuple[str, str]:
                 )
                 if table_md:
                     page_parts.append(table_md)
-
         if page_parts:
             pages.append("\n\n".join(page_parts))
 
@@ -149,8 +177,66 @@ def _parse_pdf_mistral(path: Path) -> tuple[str, str]:
         raise RuntimeError("Mistral OCR returned no content")
 
     markdown = "\n\n".join(pages)
+
+    # Rewrite image references to point to saved files
+    for img_id, local_path in image_map.items():
+        markdown = markdown.replace(f"]({img_id})", f"]({local_path})")
+
     n_pages = len(response.pages)
-    print(f"  Mistral OCR: {n_pages} pages extracted (~${n_pages * 0.001:.3f})")
+    extras = f", {n_images} figures" if n_images else ""
+    print(f"  Mistral OCR: {n_pages} pages extracted{extras} (~${n_pages * 0.001:.3f})")
+
+    title = _extract_title_from_markdown(markdown)
+    return title, markdown
+
+
+def _parse_pdf_deepseek(path: Path, figures_dir: Path | None = None) -> tuple[str, str]:
+    """PDF extraction using DeepSeek OCR via deepseek-ocr-cli (local).
+
+    Runs a local vision model (DeepSeek-VL2) through Ollama or vLLM.
+    Requires deepseek-ocr-cli installed and a running backend server.
+
+    Install: pip install openaireview[deepseek]
+    See also: https://github.com/r-uben/deepseek-ocr-cli
+    """
+    try:
+        from deepseek_ocr import OCRProcessor as DeepSeekProcessor
+    except ImportError:
+        raise ImportError(
+            "deepseek-ocr-cli not installed. "
+            "Install with: pip install openaireview[deepseek]"
+        )
+
+    print(f"  Running DeepSeek OCR on {path.name}...")
+    processor = DeepSeekProcessor(
+        extract_images=figures_dir is not None,
+        include_metadata=False,
+        analyze_figures=figures_dir is not None,
+    )
+
+    # Ensure the backend model is loaded (workaround: model init is falsy, not None)
+    if not processor._backend.model:
+        processor._backend.load_model()
+
+    result = processor.process_file(path, show_progress=True)
+    markdown = result.output_text
+
+    if not markdown.strip():
+        raise RuntimeError("DeepSeek OCR returned no content")
+
+    # Save figures if requested
+    if figures_dir is not None:
+        from deepseek_ocr.utils import sanitize_filename
+        base_name = sanitize_filename(path.stem)
+        src_figures = processor.output_dir / base_name / "figures"
+        if src_figures.exists():
+            import shutil
+            figures_dir.mkdir(parents=True, exist_ok=True)
+            for fig_file in src_figures.iterdir():
+                shutil.copy2(fig_file, figures_dir / fig_file.name)
+
+    n_pages = result.page_count
+    print(f"  DeepSeek OCR: {n_pages} pages extracted in {result.processing_time:.1f}s")
 
     title = _extract_title_from_markdown(markdown)
     return title, markdown

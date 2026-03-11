@@ -294,9 +294,9 @@ def main() -> None:
     )
     review_parser.add_argument(
         "--ocr",
-        choices=["mistral", "marker", "pymupdf"],
+        choices=["mistral", "deepseek", "marker", "pymupdf"],
         default=None,
-        help="PDF OCR engine (default: auto — tries mistral, marker, pymupdf)",
+        help="PDF OCR engine (default: auto -- tries mistral, deepseek, marker, pymupdf)",
     )
 
     # extract subcommand
@@ -312,7 +312,7 @@ def main() -> None:
     )
     extract_parser.add_argument(
         "--ocr",
-        choices=["mistral", "marker", "pymupdf"],
+        choices=["mistral", "deepseek", "marker", "pymupdf"],
         default=None,
         help="PDF OCR engine (default: auto)",
     )
