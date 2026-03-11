@@ -10,6 +10,7 @@
 7. **Misleading ambiguity** -- only if a careful reader could reasonably reach an incorrect conclusion
 8. **Underspecified methods** -- procedure too vague to reproduce; key parameters left implicit; components mentioned but never described
 9. **Internal contradictions** -- a claim contradicted by another section; a stated mitigation undermined later
+10. **Self-consistency of standards** -- does the paper apply to its own methodology the same rigor it demands of others (e.g., statistical significance, evaluation protocols, sample sizes)?
 
 ## Reasoning style
 For each issue: describe what concerned you, what you checked to resolve it (context, definitions, standard conventions), and what specifically remains problematic. Acknowledge what the authors got right. Reference standard results or conventions when relevant.
@@ -31,7 +32,7 @@ Write findings as a JSON array. Each issue is a JSON object with these fields:
     title            -- short descriptive title
     quote            -- exact verbatim quote from the paper, character-for-character, preserving any LaTeX
     explanation      -- your reasoning
-    comment_type     -- "technical" or "logical"
+    comment_type     -- "technical" or "logical" (will be reclassified during consolidation)
     confidence       -- "high", "medium", or "low"
     source_section   -- section name where issue appears
     related_sections -- list of other sections involved (may be empty)

@@ -25,13 +25,14 @@ def main():
     parser.add_argument("--output-dir", default="./review_results", help="Output directory")
     parser.add_argument("--method-key", default="openaireview__claude")
     parser.add_argument("--method-label", default="OpenAIReview (claude)")
+    parser.add_argument("--slug-suffix", default="", help="Suffix appended to the slug for the output filename and JSON slug field")
     args = parser.parse_args()
 
     review_dir = Path(args.review_dir)
 
     # Load workspace files
     metadata = json.loads((review_dir / "metadata.json").read_text())
-    slug = metadata["slug"]
+    slug = metadata["slug"] + args.slug_suffix
     title = metadata["title"]
     text = (review_dir / "full_text.md").read_text()
 
