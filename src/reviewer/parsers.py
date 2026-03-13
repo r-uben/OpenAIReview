@@ -134,13 +134,13 @@ def _clean_pymupdf4llm_markdown(md: str) -> str:
       Embedded figure text (chart labels, diagram text) and captions are kept.
     - Converts inline <br> separators in embedded text to newlines.
     """
-    lines = md.split("\n")
     out = []
-    for line in lines:
+    for line in md.split("\n"):
         # Drop picture placeholder lines (with or without bold **)
-        stripped = line.strip().strip("*").strip()
-        if stripped.startswith("==>") and "intentionally omitted" in stripped:
-            continue
+        if "intentionally omitted" in line:
+            stripped = line.strip().strip("*").strip()
+            if stripped.startswith("==>"):
+                continue
         # Clean up <br> in embedded figure text lines
         if "<br>" in line:
             line = line.replace("<br>", "\n")
@@ -150,19 +150,18 @@ def _clean_pymupdf4llm_markdown(md: str) -> str:
 
 def _extract_title_from_markdown(markdown: str) -> str:
     """Extract the first heading from markdown text as the title."""
+    fallback = ""
     for line in markdown.split("\n"):
         stripped = line.strip()
+        if not stripped:
+            continue
         if stripped.startswith("#"):
             title = stripped.lstrip("# ").strip()
             # Strip bold markers that pymupdf4llm adds to headings
-            title = re.sub(r"\*\*(.+?)\*\*", r"\1", title)
-            return title
-    # Fallback: first non-empty line
-    for line in markdown.split("\n"):
-        if line.strip():
-            return line.strip()[:200]
-    return ""
-
+            return re.sub(r"\*\*(.+?)\*\*", r"\1", title)
+        if not fallback:
+            fallback = stripped[:200]
+    return fallback
 
 
 def _parse_docx(path: Path) -> tuple[str, str]:
