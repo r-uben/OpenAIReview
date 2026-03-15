@@ -4,6 +4,14 @@ import re
 from pathlib import Path
 
 
+def _tag_has_exact_class(tag, *target_classes: str) -> bool:
+    """Check whether a BS4 tag has any of the given class names."""
+    classes = tag.get("class", [])
+    if isinstance(classes, str):
+        classes = classes.split()
+    return any(cls in target_classes for cls in classes)
+
+
 def is_url(s: str) -> bool:
     """Check if a string looks like a URL."""
     return s.startswith("http://") or s.startswith("https://")
@@ -38,14 +46,18 @@ def parse_document(file_path: str | Path) -> tuple[str, str]:
 
 
 def _parse_pdf(path: Path) -> tuple[str, str]:
-    """Extract text from PDF. Uses Marker CLI if available (better math), else pymupdf."""
+    """Extract text from PDF.
+
+    Parser chain:
+      1. Marker      — best math + table quality, requires heavy ML deps
+      2. pymupdf4llm — correct reading order and tables via GNN layout (default)
+    """
     try:
         return _parse_pdf_marker(path)
     except (ImportError, FileNotFoundError, RuntimeError) as e:
-        print(f"  Marker not available ({e}), using pymupdf fallback.")
-        print("  Note: pymupdf cannot extract math symbols correctly. "
-              "For math-heavy PDFs, use .tex source or arXiv HTML.")
-        return _parse_pdf_pymupdf(path)
+        print(f"  Marker not available ({e}), trying pymupdf4llm...")
+
+    return _parse_pdf_pymupdf4llm(path)
 
 
 def _parse_pdf_marker(path: Path) -> tuple[str, str]:
@@ -102,76 +114,62 @@ def _parse_pdf_marker(path: Path) -> tuple[str, str]:
     return title, markdown
 
 
+def _parse_pdf_pymupdf4llm(path: Path) -> tuple[str, str]:
+    """PDF extraction using pymupdf4llm with GNN layout analysis.
+
+    Fixes hyphenation, reading order, and table structure vs raw pymupdf.
+    pymupdf-layout activates automatically when installed, enabling GNN-based
+    table detection. Both packages are required dependencies.
+    """
+    try:
+        import pymupdf.layout  # noqa: F401 — activates layout plugin
+    except ImportError:
+        pass  # layout plugin missing; pymupdf4llm still works, just without GNN
+
+    import pymupdf4llm
+
+    markdown = pymupdf4llm.to_markdown(str(path))
+    markdown = _clean_pymupdf4llm_markdown(markdown)
+    title = _extract_title_from_markdown(markdown)
+    return title, markdown
+
+
+def _clean_pymupdf4llm_markdown(md: str) -> str:
+    """Post-process pymupdf4llm markdown for cleaner LLM input.
+
+    - Strips the noisy '==> picture [WxH] intentionally omitted <==' lines.
+      The pixel dimensions are meaningless and the phrasing distracts the LLM.
+      Embedded figure text (chart labels, diagram text) and captions are kept.
+    - Converts inline <br> separators in embedded text to newlines.
+    """
+    out = []
+    for line in md.split("\n"):
+        # Drop picture placeholder lines (with or without bold **)
+        if "intentionally omitted" in line:
+            stripped = line.strip().strip("*").strip()
+            if stripped.startswith("==>"):
+                continue
+        # Clean up <br> in embedded figure text lines
+        if "<br>" in line:
+            line = line.replace("<br>", "\n")
+        out.append(line)
+    return "\n".join(out)
+
+
 def _extract_title_from_markdown(markdown: str) -> str:
     """Extract the first heading from markdown text as the title."""
+    fallback = ""
     for line in markdown.split("\n"):
         stripped = line.strip()
+        if not stripped:
+            continue
         if stripped.startswith("#"):
-            return stripped.lstrip("# ").strip()
-    # Fallback: first non-empty line
-    for line in markdown.split("\n"):
-        if line.strip():
-            return line.strip()[:200]
-    return ""
-
-
-def _parse_pdf_pymupdf(path: Path) -> tuple[str, str]:
-    """Fallback PDF extraction using pymupdf (no math support)."""
-    import pymupdf
-
-    doc = pymupdf.open(str(path))
-    pages = []
-    title = ""
-
-    for page_num, page in enumerate(doc):
-        text = page.get_text()
-        pages.append(text)
-
-        if page_num == 0 and not title:
-            blocks = page.get_text("dict")["blocks"]
-            best_size = 0
-            for block in blocks:
-                if "lines" not in block:
-                    continue
-                for line in block["lines"]:
-                    for span in line["spans"]:
-                        if span["text"].strip() and span["size"] > best_size:
-                            best_size = span["size"]
-
-            if best_size > 0:
-                candidates = []
-                current_parts = []
-                for block in blocks:
-                    if "lines" not in block:
-                        if current_parts:
-                            candidates.append(" ".join(current_parts))
-                            current_parts = []
-                        continue
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            span_text = span["text"].strip()
-                            if not span_text:
-                                continue
-                            if abs(span["size"] - best_size) < 0.5:
-                                current_parts.append(span_text)
-                            elif current_parts:
-                                candidates.append(" ".join(current_parts))
-                                current_parts = []
-                if current_parts:
-                    candidates.append(" ".join(current_parts))
-                if candidates:
-                    title = max(candidates, key=len)
-
-    doc.close()
-    full_text = "\n\n".join(pages)
-
-    if not title:
-        for line in full_text.split("\n"):
-            if line.strip():
-                title = line.strip()[:200]
-                break
-
-    return title, full_text
+            title = stripped.lstrip("# ").strip()
+            # Strip bold markers that pymupdf4llm adds to headings
+            return re.sub(r"\*\*(.+?)\*\*", r"\1", title)
+        if not fallback:
+            fallback = stripped[:200]
+    return fallback
 
 
 def _parse_docx(path: Path) -> tuple[str, str]:
@@ -280,11 +278,69 @@ def _fetch_arxiv_pdf(url: str) -> tuple[str, str]:
         tmp_path.unlink(missing_ok=True)
 
 
+def _tabular_to_markdown(table_el) -> str:
+    """Convert a BS4 ltx_tabular element to a markdown table."""
+    rows = []
+    for tr in table_el.find_all("tr"):
+        cells = tr.find_all(["td", "th"])
+        if not cells:
+            continue
+        row = [
+            cell.get_text(" ", strip=True).replace("|", r"\|").replace("\n", " ")
+            for cell in cells
+        ]
+        rows.append(row)
+
+    if not rows:
+        return ""
+
+    ncols = max(len(r) for r in rows)
+
+    def pad(r):
+        return r + [""] * (ncols - len(r))
+
+    lines = ["| " + " | ".join(pad(rows[0])) + " |",
+             "| " + " | ".join(["---"] * ncols) + " |"]
+    for row in rows[1:]:
+        lines.append("| " + " | ".join(pad(row)[:ncols]) + " |")
+    return "\n".join(lines)
+
+
+def _figure_or_table_to_markdown(fig_el) -> str:
+    """Convert an ltx_figure or ltx_table element to markdown text.
+
+    Tables become markdown tables (with caption above).
+    Image figures are reduced to caption text only.
+    """
+    caption_el = fig_el.find(class_="ltx_caption")
+    caption = (caption_el.get_text(" ", strip=True) if caption_el else "").replace("\n", " ")
+
+    # Table figure: contains ltx_tabular
+    tabular = fig_el.find(class_="ltx_tabular")
+    if tabular:
+        table_md = _tabular_to_markdown(tabular)
+        if not table_md:
+            return f"**{caption}**" if caption else ""
+        return (f"**{caption}**\n\n{table_md}" if caption else table_md)
+
+    # Image figure: collect main graphics, skip tiny caption icons
+    imgs = [
+        img for img in fig_el.find_all("img", class_="ltx_graphics")
+        if not (caption_el and caption_el.find(lambda t: t is img))
+        and int(img.get("width", "100") or "100") >= 30
+    ]
+    if not imgs:
+        return f"**{caption}**" if caption else ""
+
+    return f"*{caption}*" if caption else ""
+
+
 def parse_arxiv_html(url: str) -> tuple[str, str]:
     """Fetch and parse an arXiv HTML page into (title, full_text).
 
     Works with arXiv HTML URLs like https://arxiv.org/html/2310.06825.
     The HTML is generated by LaTeXML and uses ltx_* CSS classes.
+    Tables are converted to markdown tables; figures keep caption text only.
     """
     from urllib.error import URLError
     from urllib.request import Request, urlopen
@@ -323,14 +379,35 @@ def parse_arxiv_html(url: str) -> tuple[str, str]:
         for el in doc.select(sel):
             el.decompose()
 
+    # Pre-process figures and tables: convert to markdown and replace with
+    # ltx_para marker divs so they appear at the correct position in the flow.
+    # Use exact class match (not substring) to avoid matching ltx_figure_panel etc.
+    inserted_markers = False
+    for fig in doc.find_all(lambda tag: _tag_has_exact_class(tag, "ltx_figure", "ltx_table")):
+        md = _figure_or_table_to_markdown(fig)
+        if md:
+            marker = soup.new_tag("div")
+            marker["class"] = "ltx_para"
+            marker["data-oar-content"] = md
+            fig.replace_with(marker)
+            inserted_markers = True
+        else:
+            fig.decompose()
+
     # Extract structured text using leaf content elements only.
     # ltx_para = paragraph text, ltx_title_* = headings, ltx_abstract = abstract,
-    # ltx_theorem/ltx_proof = theorems, ltx_caption = figure captions.
+    # ltx_theorem/ltx_proof = theorems. Captions are now handled via figure pre-processing.
     # We do NOT match ltx_section/ltx_subsection (containers that include all children).
     sections = []
     for element in doc.find_all(class_=re.compile(
-        r"^ltx_(para$|title_|abstract$|theorem$|proof$|caption)"
+        r"^ltx_(para$|title_|abstract$|theorem$|proof$)"
     )):
+        # Figure/table markers: use pre-computed markdown directly
+        oar_content = element.get("data-oar-content")
+        if oar_content is not None:
+            sections.append(oar_content)
+            continue
+
         text = element.get_text(" ", strip=True)
         if not text:
             continue
@@ -352,7 +429,7 @@ def parse_arxiv_html(url: str) -> tuple[str, str]:
             # Skip — already handled by ltx_abstract match
             continue
         elif cls_str.startswith("ltx_title"):
-            # Other titles (theorem, proof, caption, etc.)
+            # Other titles (theorem, proof, etc.)
             sections.append(f"\n**{text}**")
         elif "ltx_abstract" in cls_str:
             # Extract just paragraph text, skip the title child
@@ -370,7 +447,7 @@ def parse_arxiv_html(url: str) -> tuple[str, str]:
     full_text = "\n\n".join(sections)
 
     # Fallback: if structured extraction got very little, use plain text
-    if len(full_text) < 500:
+    if len(full_text) < 500 and not inserted_markers:
         full_text = doc.get_text("\n", strip=True)
 
     if not title:

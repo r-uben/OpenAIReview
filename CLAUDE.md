@@ -2,8 +2,8 @@
 
 ### Environment
 - Python 3.12. Install with `pip install -e .` (or `pip install .`).
-- Dependencies: `openai`, `tiktoken`, `python-dotenv`, `pymupdf`, `python-docx`.
-- Dev dependencies (for benchmarks): `beautifulsoup4`, `lxml`. Install with `pip install -e ".[dev]"`.
+- Dependencies: `openai`, `tiktoken`, `python-dotenv`, `pymupdf`, `pymupdf4llm`, `pymupdf-layout`, `python-docx`, `beautifulsoup4`, `lxml`.
+- Dev dependencies (for benchmarks): `pytest`. Install with `pip install -e ".[dev]"`.
 - API key and model overrides in `.env` (see `.env.example`).
 
 ### Package (`src/reviewer/`)
