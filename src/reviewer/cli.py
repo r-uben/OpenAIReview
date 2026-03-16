@@ -233,7 +233,7 @@ def cmd_extract(args: argparse.Namespace) -> None:
         f"extract_date: \"{date.today().isoformat()}\"",
     ]
     if was_ocr:
-        engine = ocr or "mistral"  # default when auto-detected
+        engine = getattr(parse_document, "_last_ocr_engine", ocr or "auto")
         frontmatter_lines.append(f"ocr_engine: \"{engine}\"")
     frontmatter_lines.append("---")
 

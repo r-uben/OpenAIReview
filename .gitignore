@@ -21,9 +21,6 @@ benchmarks/data/raw_html/
 # Review output
 review_results/
 
-# Internal docs / RFCs
-docs/
-
 # IDE
 .idea/
 .vscode/

@@ -2,7 +2,8 @@
 
 ### Environment
 - Python 3.12. Install with `pip install -e .` (or `pip install .`).
-- Dependencies: `openai`, `tiktoken`, `python-dotenv`, `pymupdf`, `pymupdf4llm`, `pymupdf-layout`, `python-docx`, `beautifulsoup4`, `lxml`, `mistralai` (for OCR).
+- Dependencies: `openai`, `tiktoken`, `python-dotenv`, `pymupdf`, `pymupdf4llm`, `pymupdf-layout`, `python-docx`, `beautifulsoup4`, `lxml`.
+- Optional: `pip install openaireview[mistral]` for Mistral OCR, `pip install openaireview[deepseek]` for DeepSeek OCR.
 - Dev dependencies (for benchmarks): `pytest`. Install with `pip install -e ".[dev]"`.
 - API key and model overrides in `.env` (see `.env.example`).
 
@@ -54,7 +55,7 @@ Five providers supported, all via OpenAI-compatible endpoints (no extra SDKs nee
 
 **Empty response handling**: if reasoning consumes all output tokens, auto-retries up to 3x with doubled `max_tokens`.
 
-**OCR** is separate: Mistral OCR uses `MISTRAL_API_KEY` via the `mistralai` SDK directly (not through `client.py`). Controlled by `--ocr` flag, not `--provider`.
+**OCR** is separate: Mistral OCR uses `MISTRAL_API_KEY` via `mistral-ocr-cli` (not through `client.py`). Controlled by `--ocr` flag, not `--provider`.
 
 ### Claude Code Skill (`src/reviewer/skill/`)
 - `SKILL.md` — Skill definition for `/openaireview` command in Claude Code. Runs a multi-agent pipeline with section-level sub-agents and cross-cutting agents, producing severity-tiered findings (major/moderate/minor).

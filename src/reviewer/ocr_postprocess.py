@@ -80,7 +80,6 @@ _CONFUSABLE_PAIRS = {
     frozenset({'I', '1'}),
     frozenset({'c', 'e'}),
     frozenset({'n', 'u'}),
-    frozenset({'rn', 'm'}),
 }
 
 

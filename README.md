@@ -21,16 +21,25 @@ uv venv && uv pip install -e .
 # or: pip install -e .
 ```
 
-### PDF math support (optional)
+### PDF parsing engines (optional)
 
-For math-heavy PDFs, install [Marker](https://github.com/VikParuchuri/marker) separately to get accurate LaTeX extraction. Without Marker, PDFs are processed with PyMuPDF which cannot extract math symbols correctly.
+PDF extraction quality matters — math symbols, tables, and reading order all affect review quality. Four engines are supported, tried in order:
+
+| Engine | Install | Best for | Notes |
+|--------|---------|----------|-------|
+| **Mistral OCR** | `pip install openaireview[mistral]` + set `MISTRAL_API_KEY` | Best overall quality, math, tables | Cloud API, ~$0.001/page |
+| **DeepSeek OCR** | `pip install openaireview[deepseek]` + local backend | Privacy-sensitive docs | Local model via Ollama/vLLM |
+| **Marker** | `uv tool install marker-pdf --with psutil` | Math-heavy PDFs (offline) | Slow without GPU |
+| **pymupdf4llm** | (included) | Fallback, always available | No math symbol support |
+
+The engine is auto-detected: if `MISTRAL_API_KEY` is set, Mistral OCR is tried first; then DeepSeek (if installed); then Marker (if on PATH); finally pymupdf4llm. You can force a specific engine with `--ocr`:
 
 ```bash
-# Install Marker CLI in an isolated environment (avoids dependency conflicts)
-uv tool install marker-pdf --with psutil
+openaireview review paper.pdf --ocr mistral
+openaireview review paper.pdf --ocr marker
 ```
 
-Marker is used automatically when available on PATH. It is most useful for math-heavy PDFs, but runs very slowly without a GPU. For papers with math, we recommend using `.tex` source, `.md`, or arXiv HTML URLs instead of PDF when possible — these always produce correct output without needing Marker.
+For papers with math, we recommend using `.tex` source, `.md`, or arXiv HTML URLs instead of PDF when possible — these always produce correct output without needing an OCR engine.
 
 ## Quick Start
 
@@ -44,6 +53,8 @@ export OPENAI_API_KEY=your_key_here       # OpenAI native
 export ANTHROPIC_API_KEY=your_key_here    # Anthropic native
 # or
 export GEMINI_API_KEY=your_key_here       # Google Gemini native
+# or
+export MISTRAL_API_KEY=your_key_here     # Mistral native (also enables Mistral OCR)
 ```
 
 Or create a `.env` file in your working directory (see `.env.example`).
@@ -72,8 +83,19 @@ Review an academic paper for technical and logical issues. Accepts a local file 
 |---|---|---|
 | `--method` | `progressive` | Review method: `zero_shot`, `local`, `progressive`, `progressive_full` |
 | `--model` | `anthropic/claude-opus-4-6` | Model to use |
+| `--provider` | (auto) | LLM provider: `openrouter`, `openai`, `anthropic`, `gemini`, `mistral` |
+| `--ocr` | (auto) | PDF OCR engine: `mistral`, `deepseek`, `marker`, `pymupdf` |
 | `--output-dir` | `./review_results` | Directory for output JSON files |
 | `--name` | (from filename) | Paper slug name |
+
+### `openaireview extract <file>`
+
+Run OCR extraction only and save as markdown with metadata frontmatter. Useful for a two-stage workflow: extract first, then review the markdown.
+
+| Option | Default | Description |
+|---|---|---|
+| `-o`, `--output` | `<file>.md` | Output markdown path |
+| `--ocr` | (auto) | PDF OCR engine: `mistral`, `deepseek`, `marker`, `pymupdf` |
 
 ### `openaireview serve`
 
@@ -86,7 +108,7 @@ Start a local visualization server to browse review results.
 
 ## Supported Input Formats
 
-- **PDF** (`.pdf`) — uses [Marker](https://github.com/VikParuchuri/marker) for high-quality extraction with LaTeX math; falls back to PyMuPDF if Marker is not installed
+- **PDF** (`.pdf`) — auto-selects best available engine (Mistral OCR > DeepSeek > Marker > pymupdf4llm); see [PDF parsing engines](#pdf-parsing-engines-optional)
 - **DOCX** (`.docx`) — via python-docx
 - **LaTeX** (`.tex`) — plain text with title extraction from `\title{}`
 - **Text/Markdown** (`.txt`, `.md`) — plain text
@@ -100,9 +122,11 @@ Start a local visualization server to browse review results.
 | `OPENAI_API_KEY` | | OpenAI native API key |
 | `ANTHROPIC_API_KEY` | | Anthropic native API key |
 | `GEMINI_API_KEY` | | Google Gemini native API key |
+| `MISTRAL_API_KEY` | | Mistral API key (also used for Mistral OCR) |
 | `MODEL` | `anthropic/claude-opus-4-6` | Default model |
+| `REVIEW_PROVIDER` | (auto) | Force a specific LLM provider |
 
-Set one API key. The provider is auto-detected from whichever key is set. See `.env.example` for a template.
+Set one API key. The provider is auto-detected from whichever key is set (priority: OpenRouter > OpenAI > Anthropic > Gemini > Mistral). See `.env.example` for a template.
 
 ## Supported Models & Pricing
 
@@ -143,6 +167,19 @@ Then in any Claude Code project:
 ```
 
 Finally, run `openaireview serve` to see results.
+
+## Updates
+
+### v0.2.3 (latest)
+- **Table & figure parsing** — arXiv HTML tables are converted to markdown tables; figures retain caption text. Improves review quality for data-heavy papers.
+- **pymupdf4llm as default PDF fallback** — replaced raw PyMuPDF with pymupdf4llm + GNN layout analysis for better reading order and table structure.
+- **Mobile-responsive visualization** — the review UI now works on phones and tablets.
+- **Collapsible resolved comments** — mark comments as resolved in the viz UI; resolved comments collapse by default.
+
+### v0.2.0
+- **Multi-provider routing** — native support for OpenRouter, OpenAI, Anthropic, Gemini, and Mistral via `--provider` flag or `REVIEW_PROVIDER` env var. Auto-detects from API keys.
+- **Claude Code skill** — `/openaireview` slash command runs a multi-agent review pipeline with section-level sub-agents. Install with `openaireview install-skill`.
+- **Resolve/filter comments** — track which review comments have been addressed in the visualization UI.
 
 ## Development
 

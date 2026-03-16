@@ -33,6 +33,9 @@ MODEL_VENDOR_TO_PROVIDER = {
 }
 
 
+_provider_announced = False
+
+
 def _make_client(name: str) -> tuple[OpenAI, str, str | None]:
     """Build an OpenAI client for a known, available provider."""
     env_var, base_url, prefix = PROVIDERS[name]
@@ -53,6 +56,14 @@ def get_client(provider: str | None = None, model: str | None = None) -> tuple[O
          prefer that vendor's native API when available
       4. Fallback: first available API key in priority order
     """
+    global _provider_announced
+
+    def _announce(msg: str) -> None:
+        global _provider_announced
+        if not _provider_announced:
+            print(f"  {msg}")
+            _provider_announced = True
+
     # Resolve provider name
     requested = provider or os.environ.get("REVIEW_PROVIDER")
     if requested:
@@ -77,7 +88,7 @@ def get_client(provider: str | None = None, model: str | None = None) -> tuple[O
         if base_url:
             kwargs["base_url"] = base_url
         display = requested.replace("_", " ").title()
-        print(f"  Using {display} API")
+        _announce(f"Using {display} API")
         return OpenAI(**kwargs), requested, prefix
 
     # Model-aware auto-detect: if model has a vendor prefix, try matching provider first
@@ -87,7 +98,7 @@ def get_client(provider: str | None = None, model: str | None = None) -> tuple[O
                 env_var, _, _ = PROVIDERS[prov_name]
                 if os.environ.get(env_var):
                     display = prov_name.replace("_", " ").title()
-                    print(f"  Using {display} API (matched model prefix '{prefix}')")
+                    _announce(f"Using {display} API (matched model prefix '{prefix}')")
                     return _make_client(prov_name)
                 break  # prefix matched but key missing — fall through
 
@@ -96,7 +107,7 @@ def get_client(provider: str | None = None, model: str | None = None) -> tuple[O
         env_var, _, _ = PROVIDERS[name]
         if os.environ.get(env_var):
             display = env_var.replace("_API_KEY", "").replace("_", " ").title()
-            print(f"  Using {display} API (auto-detected)")
+            _announce(f"Using {display} API (auto-detected)")
             return _make_client(name)
 
     print(
