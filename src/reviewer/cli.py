@@ -15,7 +15,7 @@ except ImportError:
 
 
 DEFAULT_MODEL = os.environ.get("MODEL", "anthropic/claude-opus-4-6")
-
+OCR_DISCLAIMER = "This document was extracted by OCR engine and could contain mistakes."
 
 def slugify(name: str) -> str:
     """Convert a name to a URL-friendly slug."""
@@ -125,10 +125,15 @@ def cmd_review(args: argparse.Namespace) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"{slug}.json"
 
+    # Append OCR disclaimer to saved output (not sent to LLM)
+    saved_paragraphs = paragraphs
+    if was_ocr:
+        saved_paragraphs = paragraphs + [OCR_DISCLAIMER]
+
     # Build viz-compatible data
     key = _method_key(method, args.model)
     paper_data = _build_paper_json(
-        slug, title, content, paragraphs, method, key, result
+        slug, title, saved_paragraphs, method, key, result
     )
 
     # Merge with existing file if present
@@ -147,7 +152,6 @@ def cmd_review(args: argparse.Namespace) -> None:
 def _build_paper_json(
     slug: str,
     title: str,
-    content: str,
     paragraphs: list[str],
     method: str,
     key: str,
