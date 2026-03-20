@@ -39,7 +39,7 @@ def main():
         if f.name == "all_comments.json":
             continue
         try:
-            issues = json.loads(f.read_text())
+            issues = json.loads(f.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             print(f"WARNING: Could not parse {f.name}", file=sys.stderr)
             continue
@@ -52,7 +52,7 @@ def main():
 
     # Write full-text file for on-demand reads
     out = comments_dir / "all_comments.json"
-    out.write_text(json.dumps(all_issues, indent=2))
+    out.write_text(json.dumps(all_issues, indent=2), encoding="utf-8")
 
     # Count how many source files mention each title (approximate dedup signal)
     title_sources: dict[str, set[str]] = {}

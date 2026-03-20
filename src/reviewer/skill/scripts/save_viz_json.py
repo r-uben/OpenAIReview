@@ -31,16 +31,16 @@ def main():
     review_dir = Path(args.review_dir)
 
     # Load workspace files
-    metadata = json.loads((review_dir / "metadata.json").read_text())
+    metadata = json.loads((review_dir / "metadata.json").read_text(encoding='utf-8'))
     slug = metadata["slug"] + args.slug_suffix
     title = metadata["title"]
-    text = (review_dir / "full_text.md").read_text()
+    text = (review_dir / "full_text.md").read_text(encoding='utf-8')
 
     issues_path = review_dir / "final_issues.json"
     if not issues_path.exists():
         print("ERROR: final_issues.json not found in workspace", file=sys.stderr)
         sys.exit(1)
-    issues = json.loads(issues_path.read_text())
+    issues = json.loads(issues_path.read_text(encoding='utf-8'))
 
     overall_path = review_dir / "overall_assessment.txt"
     overall = overall_path.read_text().strip() if overall_path.exists() else ""
@@ -83,7 +83,7 @@ def main():
     output_path = output_dir / f"{slug}.json"
 
     if output_path.exists():
-        data = json.loads(output_path.read_text())
+        data = json.loads(output_path.read_text(encoding='utf-8'))
         data["methods"][args.method_key] = method_data
     else:
         data = {

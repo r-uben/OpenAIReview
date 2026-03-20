@@ -148,7 +148,8 @@ def parse_input(source_type: str, input_path: str, slug: str) -> tuple[str, str]
         if _HAS_RPARSERS:
             try:
                 print("  Using reviewer.parsers for arXiv abs URL.", file=sys.stderr)
-                return _rparsers.parse_document(input_path)
+                result = _rparsers.parse_document(input_path)
+                return result[0], result[1]  # title, text
             except Exception as e:
                 print(f"  reviewer.parsers failed ({e}), using fallback.", file=sys.stderr)
         # Stdlib fallback: try HTML then PDF
@@ -174,7 +175,8 @@ def parse_input(source_type: str, input_path: str, slug: str) -> tuple[str, str]
         if _HAS_RPARSERS:
             try:
                 print("  Using reviewer.parsers for arXiv HTML URL.", file=sys.stderr)
-                return _rparsers.parse_arxiv_html(input_path)
+                result = _rparsers.parse_arxiv_html(input_path)
+                return result[0], result[1]  # title, text
             except Exception as e:
                 print(f"  reviewer.parsers failed ({e}), using fallback.", file=sys.stderr)
         # Stdlib fallback: download then parse
@@ -195,7 +197,8 @@ def parse_input(source_type: str, input_path: str, slug: str) -> tuple[str, str]
         if _HAS_RPARSERS:
             try:
                 print("  Using reviewer.parsers for downloaded file.", file=sys.stderr)
-                return _rparsers.parse_document(local_path)
+                result = _rparsers.parse_document(local_path)
+                return result[0], result[1]  # title, text
             except Exception as e:
                 print(f"  reviewer.parsers failed ({e}), using fallback.", file=sys.stderr)
         return _parse_pdf_fallback(local_path, slug)
@@ -205,7 +208,8 @@ def parse_input(source_type: str, input_path: str, slug: str) -> tuple[str, str]
         if _HAS_RPARSERS:
             try:
                 print("  Using reviewer.parsers for PDF.", file=sys.stderr)
-                return _rparsers.parse_document(input_path)
+                result = _rparsers.parse_document(input_path)
+                return result[0], result[1]  # title, text
             except Exception as e:
                 print(f"  reviewer.parsers failed ({e}), using fallback.", file=sys.stderr)
         return _parse_pdf_fallback(input_path, slug)
@@ -313,9 +317,10 @@ def _parse_pdf_fallback(pdf_path: str, slug: str) -> tuple[str, str]:
                 # Prefer reviewer.parsers even at this point
                 if _HAS_RPARSERS:
                     try:
-                        return _rparsers.parse_arxiv_html(
+                        result = _rparsers.parse_arxiv_html(
                             f"https://arxiv.org/html/{arxiv_id}"
                         )
+                        return result[0], result[1]  # title, text
                     except Exception:
                         pass
                 return _parse_arxiv_html_stdlib(html_path)
@@ -342,7 +347,7 @@ def split_sections(text: str, sections_dir: Path) -> list[dict]:
             fname = re.sub(r"[^a-z0-9]+", "_", heading.lower())[:50].strip("_")
             fname = f"{i:02d}_{fname}"
             sections.append({"file": f"{fname}.md", "heading": heading, "chars": len(sec_text)})
-            (sections_dir / f"{fname}.md").write_text(sec_text)
+            (sections_dir / f"{fname}.md").write_text(sec_text, encoding='utf-8')
     else:
         # No headings: split into ~8000-char chunks at paragraph boundaries
         buf, chunks = "", []
@@ -358,7 +363,7 @@ def split_sections(text: str, sections_dir: Path) -> list[dict]:
             fname = f"{i:02d}_chunk"
             first = chunk.strip().split("\n")[0][:60]
             sections.append({"file": f"{fname}.md", "heading": f"Chunk {i + 1}: {first}", "chars": len(chunk)})
-            (sections_dir / f"{fname}.md").write_text(chunk)
+            (sections_dir / f"{fname}.md").write_text(chunk, encoding='utf-8')
 
     return sections
 
@@ -385,18 +390,18 @@ def main():
     title, text = parse_input(source_type, args.input, slug)
 
     # Write workspace files
-    (review_dir / "full_text.md").write_text(text)
+    (review_dir / "full_text.md").write_text(text, encoding='utf-8')
     (review_dir / "metadata.json").write_text(json.dumps({
         "title": title,
         "slug": slug,
         "total_chars": len(text),
-    }, indent=2))
+    }, indent=2), encoding='utf-8')
 
     if args.criteria and Path(args.criteria).exists():
-        (review_dir / "criteria.md").write_text(Path(args.criteria).read_text())
+        (review_dir / "criteria.md").write_text(Path(args.criteria).read_text(encoding='utf-8'), encoding='utf-8')
 
     sections = split_sections(text, review_dir / "sections")
-    (review_dir / "sections" / "index.json").write_text(json.dumps(sections, indent=2))
+    (review_dir / "sections" / "index.json").write_text(json.dumps(sections, indent=2), encoding='utf-8')
 
     # Summary output
     print(f"TITLE: {title}")
