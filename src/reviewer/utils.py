@@ -78,130 +78,14 @@ def split_into_paragraphs(text: str, min_chars: int = 100) -> list[str]:
     return paragraphs
 
 
-# Maps for math normalization — built once at import time.
-_UNICODE_MATH_MAP = {
-    "\u2264": "<=",   # ≤
-    "\u2265": ">=",   # ≥
-    "\u2260": "!=",   # ≠
-    "\u2261": "=",    # ≡
-    "\u2248": "~",    # ≈
-    "\u221e": "inf",  # ∞
-    "\u2211": "sum",  # ∑
-    "\u220f": "prod", # ∏
-    "\u222b": "int",  # ∫
-    "\u2202": "d",    # ∂
-    "\u2207": "nabla",# ∇
-    "\u22a4": "T",    # ⊤
-    "\u22a5": "T",    # ⊥
-    "\u03b1": "alpha", "\u03b2": "beta", "\u03b3": "gamma",
-    "\u03b4": "delta", "\u03b5": "epsilon", "\u03b6": "zeta",
-    "\u03b7": "eta", "\u03b8": "theta", "\u03b9": "iota",
-    "\u03ba": "kappa", "\u03bb": "lambda", "\u03bc": "mu",
-    "\u03bd": "nu", "\u03be": "xi", "\u03c0": "pi",
-    "\u03c1": "rho", "\u03c3": "sigma", "\u03c4": "tau",
-    "\u03c5": "upsilon", "\u03c6": "phi", "\u03c7": "chi",
-    "\u03c8": "psi", "\u03c9": "omega",
-    "\u0393": "gamma", "\u0394": "delta", "\u0398": "theta",
-    "\u039b": "lambda", "\u039e": "xi", "\u03a0": "pi",
-    "\u03a3": "sigma", "\u03a6": "phi", "\u03a8": "psi",
-    "\u03a9": "omega",
-    "\u210b": "h",    # ℋ
-    "\u2112": "l",    # ℒ
-    "\u2115": "n",    # ℕ
-    "\u211d": "r",    # ℝ
-    "\U0001d49e": "c",  # 𝒞
-    "\U0001d4b0": "u",  # 𝒰
-    "\U0001d4b2": "w",  # 𝒲
-    "\U0001d7cf": "1",  # 𝟏 (bold 1)
-    "\u2061": "",     # invisible function application
-    "\u200b": "",     # zero-width space
-    "\u200c": "",     # zero-width non-joiner
-    "\u200d": "",     # zero-width joiner
-    "\u00d7": "x",   # ×
-    "\u22c5": ".",    # ⋅
-    "\u2026": "...",  # …
-    "\u27e8": "(",    # ⟨
-    "\u27e9": ")",    # ⟩
-    "\u2016": "||",   # ‖
-    "\u2032": "'",    # ′
-    "\u2019": "'",    # right single quote
-    "\u201c": '"',    # left double quote
-    "\u201d": '"',    # right double quote
-    "\u2013": "-",    # en dash
-    "\u2014": "-",    # em dash
-    "\u2018": "'",    # left single quote
-}
-
-_LATEX_SYMBOL_MAP = {
-    "\\leq": "<=", "\\geq": ">=", "\\neq": "!=", "\\approx": "~",
-    "\\equiv": "=", "\\sim": "~", "\\propto": "~",
-    "\\infty": "inf", "\\partial": "d",
-    "\\nabla": "nabla", "\\forall": "forall", "\\exists": "exists",
-    "\\in": "in", "\\notin": "notin", "\\subset": "subset",
-    "\\supset": "supset", "\\cup": "cup", "\\cap": "cap",
-    "\\times": "x", "\\cdot": ".", "\\ldots": "...", "\\cdots": "...",
-    "\\top": "T", "\\bot": "T",
-    "\\sum": "sum", "\\prod": "prod", "\\int": "int",
-    "\\log": "log", "\\exp": "exp", "\\sin": "sin", "\\cos": "cos",
-    "\\tan": "tan", "\\max": "max", "\\min": "min", "\\sup": "sup",
-    "\\inf": "inf", "\\lim": "lim", "\\arg": "arg",
-    "\\alpha": "alpha", "\\beta": "beta", "\\gamma": "gamma",
-    "\\delta": "delta", "\\epsilon": "epsilon", "\\varepsilon": "epsilon",
-    "\\zeta": "zeta", "\\eta": "eta", "\\theta": "theta",
-    "\\vartheta": "theta", "\\iota": "iota", "\\kappa": "kappa",
-    "\\lambda": "lambda", "\\mu": "mu", "\\nu": "nu", "\\xi": "xi",
-    "\\pi": "pi", "\\rho": "rho", "\\sigma": "sigma",
-    "\\varsigma": "sigma", "\\tau": "tau", "\\upsilon": "upsilon",
-    "\\phi": "phi", "\\varphi": "phi", "\\chi": "chi",
-    "\\psi": "psi", "\\omega": "omega",
-    "\\Gamma": "gamma", "\\Delta": "delta", "\\Theta": "theta",
-    "\\Lambda": "lambda", "\\Xi": "xi", "\\Pi": "pi",
-    "\\Sigma": "sigma", "\\Phi": "phi", "\\Psi": "psi", "\\Omega": "omega",
-    "\\langle": "(", "\\rangle": ")",
-    "\\lVert": "||", "\\rVert": "||", "\\|": "||",
-    "\\left": "", "\\right": "", "\\big": "", "\\Big": "",
-    "\\bigg": "", "\\Bigg": "",
-}
-
-# Regex to extract content from \command{content} style LaTeX
-_LATEX_WRAPPED_CMD_RE = re.compile(
-    r"\\(?:operatorname|mathrm|mathbf|mathbb|mathcal|mathit|mathsf|mathtt"
-    r"|text|textbf|textit|mbox|boldsymbol|overline|underline"
-    r"|hat|tilde|bar|vec|dot|ddot|widetilde|widehat)\{([^}]*)\}"
-)
-
-
-def _normalize_math(text: str) -> str:
-    """Strip LaTeX commands and Unicode math so both forms reduce to plain tokens."""
-    # Unicode math symbols -> ASCII equivalents
-    for u, a in _UNICODE_MATH_MAP.items():
-        text = text.replace(u, a)
-    # Strip remaining non-ASCII symbols (catches math operators we didn't map)
-    text = re.sub(r"[^\x00-\x7f]", " ", text)
-
-    # LaTeX: remove spacing commands
-    text = re.sub(r"\\[;,!: ]", " ", text)
-    text = re.sub(r"\\(?:quad|qquad|hspace|vspace|hfill|vfill)\b\{?[^}]*\}?", " ", text)
-    # LaTeX: \command{content} -> content
-    text = _LATEX_WRAPPED_CMD_RE.sub(r" \1 ", text)
-    # LaTeX: named symbols -> word equivalents
-    for latex, repl in _LATEX_SYMBOL_MAP.items():
-        text = text.replace(latex, " " + repl + " ")
-    # Remove remaining LaTeX commands (e.g. \frac, \sqrt, unknown ones)
-    text = re.sub(r"\\[a-zA-Z]+", " ", text)
-    # Remove braces, carets, backslashes
-    text = re.sub(r"[{}\\^~]", " ", text)
-    return text
-
-
 def _normalize_for_match(text: str) -> str:
     """Normalize extracted text for quote-to-paragraph matching."""
     text = text.lower()
     text = text.replace("<br>", " ")
     text = text.replace("|", " ")
     text = text.replace("*", "")
-    text = _normalize_math(text)
-    text = text.replace("_", " ")
+    text = text.replace("_", "")
+    text = text.replace("\u2019", "'")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
@@ -262,6 +146,31 @@ def locate_comment_in_document(
             best_idx = i
 
     return best_idx if best_score >= threshold else None
+
+
+def locate_comments_in_window(
+    comments: list[Comment],
+    chunk_idx: int,
+    chunks: list[tuple[list[int], str]],
+    paragraphs: list[str],
+    window_size: int = 3,
+) -> None:
+    """Set paragraph_index on each comment by matching within the context window.
+    """
+    before = window_size + 2
+    after = max(1, window_size - 1)
+    win_start = max(0, chunk_idx - before)
+    win_end = min(len(chunks), chunk_idx + after + 1)
+    window_para_indices: list[int] = []
+    for wi in range(win_start, win_end):
+        window_para_indices.extend(chunks[wi][0])
+    window_paras = [paragraphs[i] for i in window_para_indices]
+    for c in comments:
+        located = locate_comment_in_document(c.quote, window_paras)
+        if located is not None and located < len(window_para_indices):
+            c.paragraph_index = window_para_indices[located]
+        else:
+            c.paragraph_index = None
 
 
 def assign_paragraph_indices(
