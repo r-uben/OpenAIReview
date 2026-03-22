@@ -265,10 +265,12 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    from . import __version__
     parser = argparse.ArgumentParser(
         prog="openaireview",
         description="AI-powered academic paper reviewer",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     # review subcommand

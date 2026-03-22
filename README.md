@@ -15,7 +15,7 @@ uv venv && uv pip install openaireview
 
 For fast PDF processing (requires `MISTRAL_API_KEY`):
 ```bash
-uv pip install openaireview[mistral]
+uv pip install "openaireview[mistral]"
 ```
 
 For development:
